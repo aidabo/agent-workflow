@@ -2,15 +2,15 @@
 
 ## 技術選択
 
-既存の10-agent-toolsと同じtmuxを使うが、実装はshellだけにしない。
+10-agent-toolsのtracked runtimeをcopyしてstandalone化する。実装はshellだけにしない。
 
 | 部分 | 実装 |
 |---|---|
-| tmux起動・外部コマンド | shell adapter |
+| tmux起動・外部コマンド | copyしたshell launcher |
 | status CLI | Python 3標準ライブラリ |
 | status保存 | `${WORKSPACE}/.agent-workflow/state/tasks/<task_id>.json`をtaskの正とし、`agents/<agent>.json`には`active_task_ids`/`current_task_id`だけを索引保存。directory `0700`、file `0600`、temp file + renameのatomic write |
-| monitor | `10-agent-tools/agent-notify/status.py`の既存表示をadapter経由で拡張 |
-| cross-review | 10-agent-tools adapter、再実装しない |
+| monitor | copyしたstatus.pyをagent/task metadata対応へ拡張 |
+| cross-review | copyしたcross-reviewをstandalone実行 |
 | config | JSON + Python標準ライブラリ。初期にYAML依存を追加しない |
 
 ## 段階
@@ -29,7 +29,7 @@ review待ちの外部APIがcoding/test更新をブロックしない。
 
 ### 段階2: monitor
 
-- existing cross-review statusを維持
+- copyしたcross-review statusを維持
 - agent/task/phase/PR/test/heartbeat列を追加
 - API遅延時のbackground fetch
 - reference pathのdeny-by-defaultと、明示許可した非secret workspace外pathだけwarning

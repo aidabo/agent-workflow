@@ -8,13 +8,13 @@ flowchart TB
     CODE["source / tests / docs"]
     PR["GitHub PR"]
   end
-  subgraph AW["11-agent-workflow"]
+  subgraph AW["11-agent-workflow (standalone)"]
     TASK["task store\nJSON metadata"]
     CTX["context resolver\nrefs / screenshots"]
     HS["heartbeat/status\n11-agent-workflow state"]
     MON["monitor adapter\nagent + task + PR"]
   end
-  subgraph TOOLS["10-agent-tools (existing)"]
+  subgraph TOOLS["10-agent-tools (migration source)"]
     TMUX["tmux launcher / panes"]
     CR["cross-review\nwatch / status / inbox"]
     LIVE["review live log"]
@@ -52,7 +52,7 @@ task JSONが状態の正であり、agent JSONはactive taskの索引である�
 task JSONはtaskごとに分かれるため、複数taskのstatus更新は互いに独立する。monitorのGitHub/
 cross-review取得はstatus書き込みと別adapter/cacheで実行し、外部API待ちがagent更新を止めない。
 
-### 10-agent-toolsに残すもの
+### 移行後にagent-workflowが持つもの
 
 - tmux session/paneの起動
 - paneへの通知
@@ -60,8 +60,8 @@ cross-review取得はstatus書き込みと別adapter/cacheで実行し、外部A
 - reviewer選択、secret scan、inbox、PRコメント
 - `PROTOCOL.md`のレビュー運用
 
-新repositoryは`10-agent-tools`の内部ファイルを直接書き換えず、CLIまたは読み取りadapterで
-状態を取得する。cross-reviewの状態は独自に再実装しない。
+移行中はcopy元との差分を小さく保ち、copy後にstandalone codeとして動かす。
+`10-agent-tools`のruntime state、local config、secret、`.git`、cacheはcopyしない。
 
 ## データの流れ
 
@@ -71,13 +71,13 @@ sequenceDiagram
   participant S as status CLI
   participant FS as .agent-workflow state
   participant M as monitor
-  participant X as cross-review adapter
+  participant X as local cross-review
   participant G as GitHub
 
   A->>S: begin/update/heartbeat/test
   S->>FS: atomic JSON write
   M->>FS: read task/agent metadata
-  M->>X: read existing review state
+  M->>X: read local review state
   X->>G: read PR/review status
   M-->>A: monitor displays context
   A->>G: docs/code PR

@@ -10,7 +10,7 @@ workspace（例: `${WORKSPACE}`）はgit管理外で、repositoryごとの設定
   "default_screenshot_dirs": ["${WORKSPACE}/22-temp/images"],
   "default_reference_dirs": [
     "${WORKSPACE}/01-ghost-front/docs",
-    "${WORKSPACE}/10-agent-tools"
+    "${WORKSPACE}/11-agent-workflow"
   ],
   "projects": {
     "01-ghost-front": {

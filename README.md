@@ -5,16 +5,17 @@ tmux monitorで見えるようにするための独立repositoryである。
 
 ## repositoryの境界
 
-このrepositoryは`10-agent-tools`を置き換えない。
+このrepositoryは、移行完了後に`10-agent-tools`の後継として利用する。
 
 | repository | 責務 |
 |---|---|
-| `10-agent-tools` | 既存のtmux起動、pane通知、cross-review、review inbox |
-| `11-agent-workflow` | 目的/task metadata、heartbeat、reference解決、monitor表示、workflow状態 |
+| `10-agent-tools` | 移行元。既存のtmux起動、pane通知、cross-review、review inbox |
+| `11-agent-workflow` | copyした運用機能 + 目的/task metadata、heartbeat、reference解決、monitor表示 |
 | application repository | 製品コード、docs、実装PR、テスト |
 
-`10-agent-tools`へは、既存の`cross-review`・tmux情報を読むためのadapterだけを持たせる。
-既存のreview protocol、cron、inbox、PR label、review上限は変更しない。
+移行中は`10-agent-tools`を動作確認用の移行元として使う。移行完了後はworkspaceのlauncher、
+monitor、cross-reviewの参照先を`11-agent-workflow`へ切り替え、旧repositoryをread-only archiveにする。
+review protocol、cron、inbox、PR label、review上限のbehaviorはcopy後も維持する。
 
 ## 目標の流れ
 
@@ -39,6 +40,7 @@ flowchart LR
 - [context-and-references.md](docs/context-and-references.md) — screenshot/reference folder設定
 - [monitor.md](docs/monitor.md) — 現在のcross-review表示を残したmonitor設計
 - [implementation-plan.md](docs/implementation-plan.md) — Python/shell実装、段階導入、test計画
+- [migration-from-10-agent-tools.md](docs/migration-from-10-agent-tools.md) — copy範囲、除外範囲、切替、rollback
 
 ## 最初の判断
 
