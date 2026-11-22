@@ -11,7 +11,7 @@ flowchart TB
   subgraph AW["11-agent-workflow"]
     TASK["task store\nJSON metadata"]
     CTX["context resolver\nrefs / screenshots"]
-    HS["heartbeat/status\natomic files"]
+    HS["heartbeat/status\n11-agent-workflow state"]
     MON["monitor adapter\nagent + task + PR"]
   end
   subgraph TOOLS["10-agent-tools (existing)"]
@@ -24,7 +24,7 @@ flowchart TB
   H --> TASK
   TASK --> CTX
   CTX --> TMUX
-  TMUX --> HS
+  A["agent / status CLI"] --> HS
   HS --> MON
   CR --> MON
   LIVE --> MON
@@ -62,7 +62,7 @@ flowchart TB
 sequenceDiagram
   participant A as agent
   participant S as status CLI
-  participant FS as .agent-tools state
+  participant FS as .agent-workflow state
   participant M as monitor
   participant X as cross-review adapter
   participant G as GitHub
@@ -82,4 +82,5 @@ sequenceDiagram
 - monitorはagent paneへ自動入力しない
 - merge、deploy、AWS writeは人だけが実行する
 - screenshot/referenceはbasenameとmetadataを表示し、無断で外部送信しない
-- workspace外の広いpathやsecret directoryは設定時に拒否またはwarningにする
+- workspace外のpath、secret directory、`.env`、credential directoryは既定で拒否する
+- 明示的に許可された非secretのworkspace外referenceだけwarning付きで許可する

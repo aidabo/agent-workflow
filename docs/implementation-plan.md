@@ -8,8 +8,8 @@
 |---|---|
 | tmux起動・外部コマンド | shell adapter |
 | status CLI | Python 3標準ライブラリ |
-| status保存 | JSON、temp file + renameのatomic write |
-| monitor | 既存status.pyを参照するPython UI |
+| status保存 | `${WORKSPACE}/.agent-workflow/state`のJSON、temp file + renameのatomic write |
+| monitor | `10-agent-tools/agent-notify/status.py`の既存表示をadapter経由で拡張 |
 | cross-review | 10-agent-tools adapter、再実装しない |
 | config | YAMLまたはJSON。初期は依存追加を避ける |
 
@@ -19,7 +19,7 @@
 
 - `agent-status begin/update/heartbeat/test/end`
 - state/task JSON schema
-- `agent-context`のscreenshot/reference解決
+- `agent-context`のscreenshot/reference解決（workspace外secret pathはdeny）
 - stale判定
 
 ### 段階2: monitor

@@ -33,7 +33,7 @@
 | `作業中` | heartbeatが有効でagentが実行中 |
 | `人確認待ち` | 通常の確認・選択待ち |
 | `BLOCKED` | 外部依存、権限、他taskで停止 |
-| `STALE` | 600秒以上heartbeatなし |
+| `STALE` | 設定された`stale_after_seconds`以上heartbeatなし（既定600秒） |
 | `NEEDS YOU` | review上限、仕様判断、merge判断 |
 | `APPROVED` | cross-reviewは完了、人のmerge待ち |
 

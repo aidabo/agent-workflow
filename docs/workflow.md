@@ -1,32 +1,34 @@
 # Workflow state machine
 
-## docsから人のmergeまで
+## task_statusの遷移
+
+下の図は`task_status`だけを表す。`phase`と`state`は直交するmetadataであり、図のnode名に
+混ぜない。
 
 ```mermaid
 stateDiagram-v2
   [*] --> planned
-  planned --> docs: 目的と完了条件を確定
-  docs --> docs_review: docs PR作成
-  docs_review --> docs: CHANGES_REQUESTED
-  docs_review --> human_review: APPROVE
-  human_review --> assigned: 人がdocsを確認/merge
-  human_review --> needs_human: 仕様判断・保留
+  planned --> ready: docsの目的・完了条件を確定
+  ready --> in_progress: agentへ割当
+  in_progress --> ready_for_review: testとPR完了
+  ready_for_review --> in_progress: CHANGES_REQUESTED
+  ready_for_review --> done: 人が確認・merge
+  ready_for_review --> needs_human: review上限・仕様判断
+  needs_human --> ready: 人が再開を承認
 ```
 
-## 実装から人のmergeまで
+## phaseとstateの組み合わせ
 
-```mermaid
-stateDiagram-v2
-  assigned --> coding: agentへ割当
-  coding --> test: 実装完了
-  test --> coding: test失敗/修正
-  test --> code_review: test成功・code PR
-  code_review --> coding: CHANGES_REQUESTED
-  code_review --> human_review: APPROVE
-  human_review --> done: 人が確認/merge
-  human_review --> needs_human: review上限/仕様判断
-  needs_human --> coding: 人が再開
-```
+| phase | task_status | 通常のstate | 説明 |
+|---|---|---|---|
+| `docs` / `docs_review` | `in_progress` / `ready_for_review` | `busy` | docsを作成・review中 |
+| `docs_human_review` | `ready_for_review` | `waiting_user` | docsの人確認待ち |
+| `assigned` / `coding` | `in_progress` | `busy` | 実装taskを進めている |
+| `test` | `in_progress` | `busy` / `blocked` | test中または失敗で停止 |
+| `code_review` | `ready_for_review` | `busy` / `waiting_user` | code PRのreview中 |
+| `code_human_review` | `ready_for_review` | `waiting_user` | merge前の人確認 |
+| any | `needs_human` | `needs_human` | review上限・権限・仕様判断 |
+| `done` | `done` | `done` | mergeまたは引渡し済み |
 
 ## metadataの意味
 
@@ -34,12 +36,12 @@ stateDiagram-v2
 
 | key | 例 | 意味 |
 |---|---|---|
-| `phase` | `docs`, `coding`, `test`, `code_review` | 作業の段階 |
+| `phase` | `docs`, `docs_review`, `docs_human_review`, `assigned`, `coding`, `test`, `code_review`, `code_human_review`, `done` | 作業の段階 |
 | `state` | `busy`, `waiting_user`, `blocked`, `stale`, `needs_human` | agent/taskの現在状態 |
 | `task_status` | `planned`, `ready`, `in_progress`, `ready_for_review`, `done` | taskの進行状態 |
 
 通常の人確認待ちは`waiting_user`、レビュー上限・権限・仕様判断のエスカレーションは
-`needs_human`とする。
+`needs_human`とする。`needs_human`から再開する場合は、人が`ready`または適切なphaseへ戻す。
 
 ## stale
 
