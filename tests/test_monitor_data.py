@@ -47,3 +47,21 @@ class MonitorDataTests(unittest.TestCase):
             lines = format_task_lines(root, max_rows=3)
             self.assertEqual(len(lines), 4)
             self.assertIn("他 9 task", lines[-1])
+
+    def test_missing_test_status_is_displayed_as_dash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "test": {"status": None, "summary": "running"}
+            }))
+            self.assertIn("test=-", format_task_lines(root)[0])
+
+    def test_active_tasks_are_before_completed_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/done.json").write_text(json.dumps({"task_id": "done", "state": "done", "updated_at": "2025-01-02"}))
+            (root / "tasks/active.json").write_text(json.dumps({"task_id": "active", "state": "busy", "updated_at": "2025-01-01"}))
+            lines = format_task_lines(root)
+            self.assertIn("active", lines[0])

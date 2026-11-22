@@ -189,7 +189,9 @@ def review_lines_free() -> int:
 
 def frame(reviews: ReviewStatus) -> str:
     agents = agent_lines()
-    tasks = format_task_lines(max_rows=8)
+    terminal_rows = os.get_terminal_size().lines if sys.stdout.isatty() else 40
+    task_rows = max(1, min(8, terminal_rows - 14 - len(agents)))
+    tasks = format_task_lines(max_rows=task_rows)
     AGENT_ROWS[0] = len(agents)
     TASK_ROWS[0] = len(tasks)
     return "\n".join([

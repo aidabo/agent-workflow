@@ -21,6 +21,8 @@ Repo-managed notification assets for tmux -> Discord stop notifications.
 - workspaces: a workspace is a folder holding several repos (backend, frontend, …), like `~/work/legacy`. Put an `agents.yaml` at its root; `yarn agents` run from any repo inside it walks up, finds that file, starts the panes in the workspace root and keeps notify state in `<workspace>/.omx/notify-state`. Without one, it falls back to two levels above this script and the `agents.yaml` here
 - session name: first argument > `AGENTS_SESSION` > `session:` in `agents.yaml` > `<workspace folder>-agents`, so two workspaces can run side by side
 - overrides: `AGENTS_PROJECT_ROOT=/path` (workspace root), `AGENTS_YAML=/path/agents.yaml`
+- task monitor: `AGENT_WORKFLOW_WORKSPACE=/path` (task state root), optionally
+  `AGENT_WORKFLOW_STATE_ROOT=/path/.agent-workflow/state`
 - new workspace: `cp agents.yaml ~/work/<workspace>/agents.yaml`, edit the panes, and add `"agents": "bash <path to>/agent-notify/start-agents.sh"` to each repo's package.json (or just run that command from inside the workspace)
 
 ## Status board (`monitor.sh`, `status.py`)

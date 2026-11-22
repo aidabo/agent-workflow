@@ -40,7 +40,7 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
     lines = []
     for record in visible:
         test = record.get("test") or {}
-        test_status = test.get("status", "-") if isinstance(test, dict) else "-"
+        test_status = (test.get("status") or "-") if isinstance(test, dict) else "-"
         pr = f"#{record['pr']}" if record.get("pr") else "-"
         line = (
             f"  {record.get('agent', '?')} [{record.get('phase', '?')}] "
