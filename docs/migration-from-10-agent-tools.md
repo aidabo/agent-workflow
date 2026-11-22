@@ -65,6 +65,11 @@ local configは新repositoryの形式で作り直し、secretは既存のsecret 
 
 ## 移行段階
 
+### 現在の進捗
+
+移行段階1のtracked runtime copyは完了している。`agent-notify/`と`cross-review/`のsource-only/
+target-only差分をtracked file listで比較し、差分が無いことを確認した。次はbehavior lockである。
+
 ### 1. copyとbehavior lock
 
 - launcher、monitor、cross-reviewをcopy

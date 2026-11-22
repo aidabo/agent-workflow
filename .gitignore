@@ -3,3 +3,8 @@ __pycache__/
 .agent-workflow/
 .coverage
 .pytest_cache/
+.cross-review/
+cross-review/inbox/
+cross-review/config.local.sh
+cross-review/*.env
+agent-notify/.claude/
