@@ -17,7 +17,6 @@ PHASES = {
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
-SENSITIVE_PATH = re.compile(r"(^|/)(\.env(?:\.|$)|\.ssh|\.aws|\.notify|\.clawhip|credentials?|secrets?)(/|$)", re.I)
 SECRET_VALUE = re.compile(r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,})")
 
 
@@ -51,6 +50,12 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def atomic_write(path: Path, value: dict[str, Any]) -> None:
+    root = path.parents[1]
+    root.parent.mkdir(parents=True, exist_ok=True)
+    if root.parent.name == ".agent-workflow":
+        root.parent.chmod(0o700)
+    root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.parent.chmod(0o700)
     payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -78,8 +83,44 @@ def validate_enum(value: str | None, values: set[str], label: str) -> None:
         raise ValueError(f"invalid {label}: {value}")
 
 
-def merge_record(path: Path, updates: dict[str, Any]) -> dict[str, Any]:
-    record = read_json(path)
+def validate_combination(phase: str | None, state: str | None, task_status: str | None) -> None:
+    if phase == "done" and task_status != "done":
+        raise ValueError("phase=done requires task_status=done")
+    if task_status == "done" and phase != "done":
+        raise ValueError("task_status=done requires phase=done")
+    if state == "done" and (phase != "done" or task_status != "done"):
+        raise ValueError("state=done requires phase=done and task_status=done")
+    if task_status == "needs_human" and state not in {None, "needs_human", "blocked", "waiting_user"}:
+        raise ValueError("task_status=needs_human requires a human-escalation state")
+
+
+def parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def sweep_stale(root: Path, stale_after_seconds: int, current: datetime | None = None) -> list[str]:
+    if stale_after_seconds < 600:
+        raise ValueError("stale_after_seconds must be at least 600")
+    current = current or datetime.now(timezone.utc)
+    changed: list[str] = []
+    for path in sorted((root / "agents").glob("*.json")):
+        record = read_json(path)
+        heartbeat = record.get("heartbeat_at")
+        if record.get("state") in {"done", "stale"} or not heartbeat:
+            continue
+        if (current - parse_time(heartbeat)).total_seconds() >= stale_after_seconds:
+            record["state"] = "stale"
+            record["stale_at"] = current.replace(microsecond=0).isoformat()
+            record["updated_at"] = current.replace(microsecond=0).isoformat()
+            atomic_write(path, record)
+            changed.append(record.get("agent", path.stem))
+    return changed
+
+
+def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, clear_fields: set[str] | None = None) -> dict[str, Any]:
+    record = {} if reset else read_json(path)
+    for field in clear_fields or set():
+        record.pop(field, None)
     record.update({key: value for key, value in updates.items() if value is not None})
     record["updated_at"] = now()
     atomic_write(path, record)
@@ -104,6 +145,7 @@ def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--test-summary")
     parser.add_argument("--event")
     parser.add_argument("--blocked-reason")
+    parser.add_argument("--clear-blocked", action="store_true")
 
 
 def command_status(args: argparse.Namespace) -> int:
@@ -122,13 +164,17 @@ def command_status(args: argparse.Namespace) -> int:
     state = args.state
     task_status = args.task_status
     if args.command == "begin":
+        if not args.phase:
+            raise ValueError("begin requires --phase")
         state = state or "busy"
         task_status = task_status or "in_progress"
     elif args.command == "heartbeat":
         state = state or "busy"
     elif args.command == "end":
+        args.phase = "done"
         state = state or "done"
         task_status = task_status or "done"
+    validate_combination(args.phase, state, task_status)
 
     task_updates = {
         "task_id": task_id, "repo": args.repo, "repo_dir": args.repo_dir,
@@ -148,9 +194,26 @@ def command_status(args: argparse.Namespace) -> int:
         "last_event": args.event, "blocked_reason": args.blocked_reason,
         "heartbeat_at": timestamp, "updated_at": timestamp,
     }
-    task = merge_record(path_for(root, "tasks", task_id), task_updates)
-    agent_record = merge_record(path_for(root, "agents", agent), agent_updates)
+    task = merge_record(
+        path_for(root, "tasks", task_id), task_updates,
+        clear_fields={"blocked_reason"} if args.clear_blocked else set(),
+    )
+    agent_path = path_for(root, "agents", agent)
+    previous_agent = read_json(agent_path)
+    reset_agent = args.command == "begin" and previous_agent.get("task_id") not in {None, task_id}
+    agent_record = merge_record(
+        agent_path, agent_updates, reset=reset_agent,
+        clear_fields={"blocked_reason"} if args.clear_blocked else set(),
+    )
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_sweep(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    changed = sweep_stale(root, args.stale_after_seconds, parse_time(args.now) if args.now else None)
+    print(json.dumps({"stale_agents": changed}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -168,6 +231,11 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("begin", "update", "heartbeat", "test", "end"):
         command = sub.add_parser(name)
         common_parser(command)
+    sweep = sub.add_parser("sweep")
+    sweep.add_argument("--workspace", default=".")
+    sweep.add_argument("--state-root")
+    sweep.add_argument("--stale-after-seconds", type=int, default=600)
+    sweep.add_argument("--now")
     context = sub.add_parser("context")
     context.add_argument("--context-file", required=True)
     context.add_argument("--project")
@@ -176,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         if args.command == "context":
             return command_context(args)
+        if args.command == "sweep":
+            return command_sweep(args)
         return command_status(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"agent-status: {exc}", file=os.sys.stderr)

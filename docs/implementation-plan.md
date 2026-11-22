@@ -20,7 +20,7 @@
 - `agent-status begin/update/heartbeat/test/end`
 - state/task JSON schema
 - `agent-context`のscreenshot/reference解決（workspace外secret pathはdeny）
-- stale判定
+- `sweep`によるstale判定とheartbeat設定検証
 
 ### 段階2: monitor
 

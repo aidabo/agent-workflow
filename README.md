@@ -56,6 +56,9 @@ bin/agent-status begin \
 bin/agent-status heartbeat --workspace "$WORKSPACE" --agent codex --task-id demo-001
 bin/agent-status test --workspace "$WORKSPACE" --agent codex --task-id demo-001 \
   --test-status passed --test-summary "unit tests"
+bin/agent-status sweep --workspace "$WORKSPACE" --stale-after-seconds 600
+bin/agent-status context \
+  --context-file "$WORKSPACE/agent-context.json" --project 01-ghost-front
 bin/agent-status end --workspace "$WORKSPACE" --agent codex --task-id demo-001
 ```
 
