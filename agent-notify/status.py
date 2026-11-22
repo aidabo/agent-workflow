@@ -29,6 +29,10 @@ import tty
 from datetime import datetime
 from pathlib import Path
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from agent_workflow.monitor_data import format_task_lines
+
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
 
@@ -172,25 +176,31 @@ class ReviewStatus:
             return [self.lines[0] + stamp, *self.lines[1:]]
 
 
-AGENT_ROWS = [1]   # agent lines in the last frame (the review list gets the rest of the height)
+AGENT_ROWS = [1]
+TASK_ROWS = [1]
 
 
 def review_lines_free() -> int:
     """Lines the cross-review part may use: the pane height minus the clock line, the blank line,
     the agent header and the agent rows."""
     rows = os.get_terminal_size().lines if sys.stdout.isatty() else 40
-    return max(10, rows - 3 - AGENT_ROWS[0] - 1)
+    return max(10, rows - 4 - AGENT_ROWS[0] - TASK_ROWS[0] - 1)
 
 
 def frame(reviews: ReviewStatus) -> str:
     agents = agent_lines()
+    tasks = format_task_lines()
     AGENT_ROWS[0] = len(agents)
+    TASK_ROWS[0] = len(tasks)
     return "\n".join([
         f"{DIM}{datetime.now():%H:%M:%S}   r: 更新  q: 終了  前のセッションへ: prefix + L{RESET}",
         *reviews.render(),
         "",
         f"{BOLD}エージェント{RESET}",
         *agents,
+        "",
+        f"{BOLD}タスク{RESET}",
+        *tasks,
     ])
 
 
