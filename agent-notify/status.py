@@ -190,7 +190,8 @@ def review_lines_free() -> int:
 def frame(reviews: ReviewStatus) -> str:
     agents = agent_lines()
     terminal_rows = os.get_terminal_size().lines if sys.stdout.isatty() else 40
-    task_rows = max(1, min(8, terminal_rows - 14 - len(agents)))
+    # Reserve clock/review/section headers, the review minimum, and one task omission row.
+    task_rows = max(1, min(8, terminal_rows - 16 - len(agents)))
     tasks = format_task_lines(max_rows=task_rows)
     AGENT_ROWS[0] = len(agents)
     TASK_ROWS[0] = len(tasks)

@@ -32,8 +32,9 @@ local task/heartbeat表示は更新する。screenshot/referenceのdirectory sca
 同じagentの複数taskはtaskごとに別行で表示する。cross-reviewのreview stateは対象PRのtaskだけに
 紐付け、別taskを`blocked`へ変更しない。task間の依存がある場合だけ`blocked_by`を表示する。
 
-task欄はpane高さから表示行数を計算し、最大8件まで表示する。収まらない履歴は「他N task」と
-まとめ、review欄とagent欄を押し出さない。完了taskはactive taskの後に表示する。
+task欄はpane高さから表示行数を計算し、最大8件まで表示する（省略行を除く）。低いpaneでは
+1件まで自動的に減らし、収まらない履歴は「他N task」とまとめる。review欄とagent欄を押し出さず、
+完了taskはactive taskの後に表示する。
 
 取得失敗は`unknown`と表示し、推測で`done`にしない。GitHub APIが遅くてもpane stateの更新を
 止めない。
