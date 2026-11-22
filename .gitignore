@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .agent-workflow/
 .agent-tools/
+.behavior-lock/
 .coverage
 .pytest_cache/
 .cross-review/

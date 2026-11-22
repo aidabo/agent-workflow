@@ -41,6 +41,7 @@ flowchart LR
 - [monitor.md](docs/monitor.md) — 現在のcross-review表示を残したmonitor設計
 - [implementation-plan.md](docs/implementation-plan.md) — Python/shell実装、段階導入、test計画
 - [migration-from-10-agent-tools.md](docs/migration-from-10-agent-tools.md) — copy範囲、除外範囲、切替、rollback
+- [behavior-lock.md](docs/behavior-lock.md) — copy manifest、old/new snapshot、parallel task検証
 
 ## Copied runtime
 
