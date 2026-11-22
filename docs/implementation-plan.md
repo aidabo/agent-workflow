@@ -8,7 +8,7 @@
 |---|---|
 | tmux起動・外部コマンド | shell adapter |
 | status CLI | Python 3標準ライブラリ |
-| status保存 | `${WORKSPACE}/.agent-workflow/state`のJSON、temp file + renameのatomic write |
+| status保存 | `${WORKSPACE}/.agent-workflow/state/tasks/<task_id>.json` / `agents/<agent>.json`。directory `0700`、file `0600`、temp file + renameのatomic write |
 | monitor | `10-agent-tools/agent-notify/status.py`の既存表示をadapter経由で拡張 |
 | cross-review | 10-agent-tools adapter、再実装しない |
 | config | YAMLまたはJSON。初期は依存追加を避ける |
@@ -27,7 +27,7 @@
 - existing cross-review statusを維持
 - agent/task/phase/PR/test/heartbeat列を追加
 - API遅延時のbackground fetch
-- reference folder warning
+- reference pathのdeny-by-defaultと、明示許可した非secret workspace外pathだけwarning
 
 ### 段階3: workflow gate
 
@@ -46,5 +46,13 @@
 - secret-like key/valueの拒否・redact
 - tmuxなしでもcross-review表示が落ちない
 - GitHub API timeoutでもagent状態が更新される
-- reference/screenshot path不存在のwarning
+- reference/screenshot path不存在・secret path・workspace外pathのdeny/warning境界
 - docs PR → task → code PRのparent関係
+
+代表的な組み合わせ例:
+
+```text
+phase=code_review / task_status=ready_for_review / state=waiting_user
+phase=coding      / task_status=in_progress     / state=busy
+phase=code_human_review / task_status=ready_for_review / state=waiting_user
+```

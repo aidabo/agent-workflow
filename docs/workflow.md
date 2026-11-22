@@ -12,9 +12,11 @@ stateDiagram-v2
   ready --> in_progress: agentへ割当
   in_progress --> ready_for_review: testとPR完了
   ready_for_review --> in_progress: CHANGES_REQUESTED
-  ready_for_review --> done: 人が確認・merge
+  ready_for_review --> ready: docs_human_reviewで人が確認・merge
+  ready_for_review --> done: code_human_reviewで人が確認・merge
   ready_for_review --> needs_human: review上限・仕様判断
-  needs_human --> ready: 人が再開を承認
+  needs_human --> ready: docs taskを人が再開
+  needs_human --> in_progress: coding taskを人が再開
 ```
 
 ## phaseとstateの組み合わせ
@@ -37,11 +39,12 @@ stateDiagram-v2
 | key | 例 | 意味 |
 |---|---|---|
 | `phase` | `docs`, `docs_review`, `docs_human_review`, `assigned`, `coding`, `test`, `code_review`, `code_human_review`, `done` | 作業の段階 |
-| `state` | `busy`, `waiting_user`, `blocked`, `stale`, `needs_human` | agent/taskの現在状態 |
-| `task_status` | `planned`, `ready`, `in_progress`, `ready_for_review`, `done` | taskの進行状態 |
+| `state` | `busy`, `waiting_user`, `blocked`, `stale`, `needs_human`, `done` | agent/taskの現在状態 |
+| `task_status` | `planned`, `ready`, `in_progress`, `ready_for_review`, `needs_human`, `done` | taskの進行状態 |
 
 通常の人確認待ちは`waiting_user`、レビュー上限・権限・仕様判断のエスカレーションは
-`needs_human`とする。`needs_human`から再開する場合は、人が`ready`または適切なphaseへ戻す。
+`needs_human`とする。`needs_human`から再開する場合は、docs taskなら`ready`、coding taskなら
+`in_progress`へ戻す。表にないphase/state/task_statusの組み合わせはschemaで拒否する。
 
 ## stale
 
