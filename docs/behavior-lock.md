@@ -15,7 +15,7 @@ make migration-check
 ```
 
 前提として、`../10-agent-tools`がclone済みで、比較対象の`origin/main`をfetchしていることを確認する。
-成功時は比較したsource commit SHAが表示され、失敗時はsource-only/target-onlyまたはblob/mode差分を読む。
+成功時は比較したsource commit SHAが表示され、失敗時はsource-only/target-onlyのpath差分を読む。
 
 trackedな`agent-notify/`と`cross-review/`のsource/target path一覧が一致する。local config、
 inbox、report、runtime state、secretは比較対象にしない。
@@ -43,6 +43,11 @@ make check
 LOCK_WORKSPACE="$(mktemp -d)"
 mkdir -p "$LOCK_WORKSPACE"/{old,new}
 
+# 旧/新のcross-reviewが同じfixtureを読むよう、両方に同じconfigとinboxを指定する。
+# fixture configには同じREPOSとINBOX_DIR="$LOCK_WORKSPACE/inbox"を設定する。
+mkdir -p "$LOCK_WORKSPACE/inbox"
+export CROSS_REVIEW_CONFIG="$LOCK_WORKSPACE/cross-review.fixture.sh"
+
 # 旧runtime
 AGENT_TOOLS_HOME=../10-agent-tools \
   python3 ../10-agent-tools/agent-notify/status.py --once > "$LOCK_WORKSPACE/old/status.txt"
@@ -59,6 +64,7 @@ APPROVED/CHANGES REQUESTED/NEEDS YOU、pane state分類が一致することを�
 ## 4. 並列taskの確認
 
 ```bash
+: "${LOCK_WORKSPACE:?セクション3と同じshellで続けて実行する}"
 bin/agent-status begin --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-a --phase coding
 bin/agent-status begin --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-b --phase test
 bin/agent-status end --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-a
