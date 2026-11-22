@@ -49,6 +49,16 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(one["branch"], "old")
             self.assertEqual(one["pr"], 1)
             self.assertEqual(two["task_id"], "two")
+            self.assertEqual(main(["end", "--workspace", tmp, "--agent", "codex", "--task-id", "one"]), 0)
+            agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
+            self.assertEqual(agent["active_task_ids"], ["two"])
+            self.assertEqual(agent["current_task_id"], "two")
+
+    def test_completed_task_cannot_be_updated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "coding"]), 0)
+            self.assertEqual(main(["end", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
+            self.assertEqual(main(["test", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--test-status", "passed"]), 2)
 
     def test_rejects_invalid_state_combination(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,6 +95,11 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["update", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--task-status", "ready_for_review"]), 2)
             self.assertEqual(main(["end", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
             self.assertEqual(main(["update", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "coding"]), 2)
+
+    def test_phase_and_state_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--state", "busy"]), 2)
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-2", "--phase", "docs_review"]), 0)
 
 
 class ContextTests(unittest.TestCase):

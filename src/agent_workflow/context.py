@@ -28,16 +28,18 @@ def expand_path(value: str, base: Path) -> Path:
 
 
 def check_path(path: Path, workspace: Path, allow_external: bool = False) -> str | None:
-    if any(sensitive_part(part) for part in path.parts):
-        raise ValueError(f"sensitive reference path is denied: {path}")
     try:
-        path.relative_to(workspace)
+        relative = path.relative_to(workspace)
     except ValueError:
         if not allow_external:
             raise ValueError(f"reference path is outside workspace: {path}")
         warning = f"external non-secret reference allowed: {path}"
+        parts = path.parts
     else:
         warning = None
+        parts = relative.parts
+    if any(sensitive_part(part) for part in parts):
+        raise ValueError(f"sensitive reference path is denied: {path}")
     if not path.exists():
         raise FileNotFoundError(path)
     return warning

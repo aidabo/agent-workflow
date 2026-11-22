@@ -71,6 +71,18 @@ task状態は`task_id`ごとに独立したファイルへ保存する。同じa
 agent indexには`active_task_ids`を保持し、monitorはagent × taskの行で表示する。一方のtaskを
 `end`しても、他のtaskのbranch・test・review状態は変更しない。
 
+agent indexの例:
+
+```json
+{
+  "agent": "codex",
+  "active_task_ids": ["runner-001", "stack-042"],
+  "current_task_id": "stack-042"
+}
+```
+
+task JSONが各taskのphase/state/testの正であり、agent indexは一覧・current taskの索引だけを持つ。
+
 cross-reviewはPR単位の非同期状態であり、別taskのcoding/testを止めない。同じtaskのPRだけが
 `code_review`状態になる。依存関係がある場合だけtask metadataの`blocked_by`で明示的に止める。
 

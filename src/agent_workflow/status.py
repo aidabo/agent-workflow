@@ -17,8 +17,8 @@ PHASES = {
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
 ALLOWED_PHASE_STATUS = {
-    "docs": {"planned", "ready", "in_progress"},
-    "docs_review": {"ready_for_review"},
+    "docs": {"planned", "ready", "in_progress", "ready_for_review"},
+    "docs_review": {"in_progress", "ready_for_review"},
     "docs_human_review": {"ready_for_review"},
     "assigned": {"ready", "in_progress"},
     "coding": {"in_progress"},
@@ -111,6 +111,14 @@ def validate_combination(phase: str | None, state: str | None, task_status: str 
         raise ValueError("state=done requires phase=done and task_status=done")
     if task_status == "needs_human" and state not in {None, "needs_human", "blocked", "waiting_user", "stale"}:
         raise ValueError("task_status=needs_human requires a human-escalation state")
+    if state in {"blocked", "stale"}:
+        return
+    if phase in {"docs_human_review", "code_human_review"} and state not in {None, "waiting_user", "needs_human"}:
+        raise ValueError(f"human-review phase requires waiting_user state: {phase}/{state}")
+    if state == "idle" and task_status not in {None, "planned", "ready"}:
+        raise ValueError("state=idle requires task_status=planned or ready")
+    if phase == "done" and state not in {None, "done"}:
+        raise ValueError("phase=done requires state=done")
 
 
 def parse_time(value: str) -> datetime:
@@ -201,6 +209,8 @@ def command_status(args: argparse.Namespace) -> int:
     agent_path = path_for(root, "agents", agent)
     previous_task = read_json(task_path)
     previous_agent = read_json(agent_path)
+    if args.command != "end" and previous_task.get("task_status") == "done":
+        raise ValueError("cannot update a completed task; begin a new task_id")
     effective_phase = args.phase if args.phase is not None else previous_task.get("phase")
     effective_task_status = task_status if task_status is not None else previous_task.get("task_status")
     effective_state = state if state is not None else previous_task.get("state")
@@ -220,8 +230,15 @@ def command_status(args: argparse.Namespace) -> int:
         previous_active.discard(task_id)
     else:
         previous_active.add(task_id)
+    current_task_id = previous_agent.get("current_task_id")
+    if args.command != "end":
+        current_task_id = task_id
+    elif current_task_id == task_id:
+        current_task_id = sorted(previous_active)[-1] if previous_active else None
+    elif current_task_id not in previous_active:
+        current_task_id = sorted(previous_active)[-1] if previous_active else None
     agent_updates = {
-        "agent": agent, "active_task_ids": sorted(previous_active), "current_task_id": None if args.command == "end" else task_id,
+        "agent": agent, "active_task_ids": sorted(previous_active), "current_task_id": current_task_id,
         "heartbeat_at": timestamp, "updated_at": timestamp,
     }
     task = merge_record(
@@ -230,7 +247,7 @@ def command_status(args: argparse.Namespace) -> int:
     )
     agent_record = merge_record(
         agent_path, agent_updates,
-        clear_fields=(({"current_task_id"} if args.command == "end" else set())
+        clear_fields=(({"current_task_id"} if current_task_id is None else set())
                       | ({"blocked_reason"} if args.clear_blocked else set())),
     )
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
@@ -241,7 +258,7 @@ def command_sweep(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
     changed = sweep_stale(root, args.stale_after_seconds, args.heartbeat_interval_seconds, parse_time(args.now) if args.now else None)
-    print(json.dumps({"stale_agents": changed}, ensure_ascii=False, indent=2))
+    print(json.dumps({"stale_tasks": changed}, ensure_ascii=False, indent=2))
     return 0
 
 
