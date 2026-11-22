@@ -14,7 +14,10 @@ AGENT_TOOLS_SOURCE_REF=origin/main \
 make migration-check
 ```
 
-trackedな`agent-notify/`と`cross-review/`のsource/target一覧が一致する。local config、
+前提として、`../10-agent-tools`がclone済みで、比較対象の`origin/main`をfetchしていることを確認する。
+成功時は比較したsource commit SHAが表示され、失敗時はsource-only/target-onlyまたはblob/mode差分を読む。
+
+trackedな`agent-notify/`と`cross-review/`のsource/target path一覧が一致する。local config、
 inbox、report、runtime state、secretは比較対象にしない。
 
 ## 2. 静的check
@@ -37,16 +40,17 @@ make check
 次の出力を保存する。
 
 ```bash
-mkdir -p .behavior-lock/{old,new}
+LOCK_WORKSPACE="$(mktemp -d)"
+mkdir -p "$LOCK_WORKSPACE"/{old,new}
 
 # 旧runtime
 AGENT_TOOLS_HOME=../10-agent-tools \
-  python3 ../10-agent-tools/agent-notify/status.py --once > .behavior-lock/old/status.txt
-bash ../10-agent-tools/cross-review/status.sh > .behavior-lock/old/review.txt
+  python3 ../10-agent-tools/agent-notify/status.py --once > "$LOCK_WORKSPACE/old/status.txt"
+bash ../10-agent-tools/cross-review/status.sh > "$LOCK_WORKSPACE/old/review.txt"
 
 # standalone runtime
-python3 agent-notify/status.py --once > .behavior-lock/new/status.txt
-bash cross-review/status.sh > .behavior-lock/new/review.txt
+python3 agent-notify/status.py --once > "$LOCK_WORKSPACE/new/status.txt"
+bash cross-review/status.sh > "$LOCK_WORKSPACE/new/review.txt"
 ```
 
 環境依存の時刻、API取得順、host pathを正規化して比較する。PRの判定名、author/reviewer、
@@ -55,13 +59,18 @@ APPROVED/CHANGES REQUESTED/NEEDS YOU、pane state分類が一致することを�
 ## 4. 並列taskの確認
 
 ```bash
-bin/agent-status begin --workspace "$PWD" --agent codex --task-id lock-a --phase coding
-bin/agent-status begin --workspace "$PWD" --agent codex --task-id lock-b --phase test
-bin/agent-status end --workspace "$PWD" --agent codex --task-id lock-a
+bin/agent-status begin --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-a --phase coding
+bin/agent-status begin --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-b --phase test
+bin/agent-status end --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-a
 ```
 
 `lock-b`がactive taskとして残り、current taskが`lock-b`になることを確認する。lock-aのreview
 状態やlock-bのtest状態は変更されない。
+
+```bash
+bin/agent-status end --workspace "$LOCK_WORKSPACE" --agent codex --task-id lock-b
+rm -rf "$LOCK_WORKSPACE"
+```
 
 ## 5. 切替前の停止条件
 
