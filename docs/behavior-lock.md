@@ -61,6 +61,17 @@ bash cross-review/status.sh > "$LOCK_WORKSPACE/new/review.txt"
 環境依存の時刻、API取得順、host pathを正規化して比較する。PRの判定名、author/reviewer、
 APPROVED/CHANGES REQUESTED/NEEDS YOU、pane state分類が一致することを確認する。
 
+正規化比較は次で実行する。
+
+```bash
+scripts/compare-snapshots.sh \
+  "$LOCK_WORKSPACE/old/status.txt" \
+  "$LOCK_WORKSPACE/new/status.txt"
+```
+
+GitHub APIが両方で失敗している場合は、成功と判定せず「同じエラー表示になった」と記録する。
+live PR判定の比較には、APIへ接続できる環境で同じfixtureを再実行する。
+
 ## 4. 並列taskの確認
 
 ```bash
