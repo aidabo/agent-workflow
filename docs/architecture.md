@@ -39,11 +39,18 @@ flowchart TB
 ### 11-agent-workflowが持つもの
 
 - task ID、目的、完了条件、parent docs PR、code PR
-- agentのphase/state/task_status/heartbeat
+- taskごとのphase/state/task_status/heartbeat
+- agent indexの`active_task_ids`と`current_task_id`
 - branch、commit、test結果の短い要約
 - workspace/projectごとのscreenshot/reference設定
 - stale・blocked・needs_humanの判定
 - monitor用の集約表示
+
+task JSONが状態の正であり、agent JSONはactive taskの索引である。agentがtaskを切り替えても、
+他taskのJSONは上書きしない。
+
+task JSONはtaskごとに分かれるため、複数taskのstatus更新は互いに独立する。monitorのGitHub/
+cross-review取得はstatus書き込みと別adapter/cacheで実行し、外部API待ちがagent更新を止めない。
 
 ### 10-agent-toolsに残すもの
 

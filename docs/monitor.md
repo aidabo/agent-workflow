@@ -10,6 +10,7 @@
 ├─────────────────────────────────────────────────────────────┤
 │ agent   phase       task       PR     test    heartbeat repo  │
 │ codex   test        runner-01  #783   passed  12:10     front │
+│ codex   coding      stack-042  —      running 12:09     front │
 │ claude  code_review docs-014   #793   waiting 12:08     front │
 ├─────────────────────────────────────────────────────────────┤
 │ review live: current reviewer / event / last update           │
@@ -22,6 +23,13 @@
 2. Git: branch、commit、dirty
 3. GitHub PR: PR、review、merge state
 4. tmux pane: busy/attention/typing/idleの補助情報
+
+更新間隔の初期値は、tmux/statusを3秒、GitHub/cross-reviewを20秒とする。GitHub APIが遅い間も
+local task/heartbeat表示は更新する。screenshot/referenceのdirectory scanはtask開始または
+設定変更時だけ行い、毎フレーム全folderを走査しない。
+
+同じagentの複数taskはtaskごとに別行で表示する。cross-reviewのreview stateは対象PRのtaskだけに
+紐付け、別taskを`blocked`へ変更しない。task間の依存がある場合だけ`blocked_by`を表示する。
 
 取得失敗は`unknown`と表示し、推測で`done`にしない。GitHub APIが遅くてもpane stateの更新を
 止めない。

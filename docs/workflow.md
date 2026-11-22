@@ -39,12 +39,13 @@ stateDiagram-v2
 | key | 例 | 意味 |
 |---|---|---|
 | `phase` | `docs`, `docs_review`, `docs_human_review`, `assigned`, `coding`, `test`, `code_review`, `code_human_review`, `done` | 作業の段階 |
-| `state` | `busy`, `waiting_user`, `blocked`, `stale`, `needs_human`, `done` | agent/taskの現在状態 |
+| `state` | `busy`, `waiting_user`, `blocked`, `stale`, `needs_human`, `idle`, `done` | agent/taskの現在状態 |
 | `task_status` | `planned`, `ready`, `in_progress`, `ready_for_review`, `needs_human`, `done` | taskの進行状態 |
 
 通常の人確認待ちは`waiting_user`、レビュー上限・権限・仕様判断のエスカレーションは
 `needs_human`とする。`needs_human`から再開する場合は、docs taskなら`ready`、coding taskなら
 `in_progress`へ戻す。表にないphase/state/task_statusの組み合わせはschemaで拒否する。
+`idle`は未割当の`planned`/`ready` taskに使い、`blocked`/`stale`は他のphase/statusへ重畳する。
 
 ## stale
 
