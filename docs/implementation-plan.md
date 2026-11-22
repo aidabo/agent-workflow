@@ -8,7 +8,7 @@
 |---|---|
 | tmux起動・外部コマンド | shell adapter |
 | status CLI | Python 3標準ライブラリ |
-| status保存 | `${WORKSPACE}/.agent-workflow/state/tasks/<task_id>.json` / `agents/<agent>.json`。directory `0700`、file `0600`、temp file + renameのatomic write |
+| status保存 | `${WORKSPACE}/.agent-workflow/state/tasks/<task_id>.json`をtaskの正とし、`agents/<agent>.json`には`active_task_ids`/`current_task_id`だけを索引保存。directory `0700`、file `0600`、temp file + renameのatomic write |
 | monitor | `10-agent-tools/agent-notify/status.py`の既存表示をadapter経由で拡張 |
 | cross-review | 10-agent-tools adapter、再実装しない |
 | config | JSON + Python標準ライブラリ。初期にYAML依存を追加しない |
@@ -18,9 +18,14 @@
 ### 段階1: status/context
 
 - `agent-status begin/update/heartbeat/test/end`
+- 同じagentの複数taskを独立してbegin/update/endできる
 - state/task JSON schema
 - `agent-context`のscreenshot/reference解決（workspace外secret pathはdeny）
 - `sweep`によるstale判定とheartbeat設定検証
+
+status commandはネットワークアクセスを行わず、1 taskのJSONとagent indexだけを更新する。
+monitorのlocal status、tmux capture、GitHub/cross-review APIは別々のcache/更新間隔で動かし、
+review待ちの外部APIがcoding/test更新をブロックしない。
 
 ### 段階2: monitor
 
@@ -48,6 +53,9 @@
 - GitHub API timeoutでもagent状態が更新される
 - reference/screenshot path不存在・secret path・workspace外pathのdeny/warning境界
 - docs PR → task → code PRのparent関係
+- 並列taskの一つをendしても、他taskのrecordが変わらない
+- review対象taskだけがcode_reviewになり、独立taskはcoding/testを継続できる
+- 100 taskのstatus更新が全task scanにならず、1 task更新のまま完了する
 
 代表的な組み合わせ例:
 

@@ -25,7 +25,7 @@ class StatusTests(unittest.TestCase):
             task = json.loads((workspace / ".agent-workflow/state/tasks/task-1.json").read_text())
             agent = json.loads((workspace / ".agent-workflow/state/agents/codex.json").read_text())
             self.assertEqual(task["task_status"], "in_progress")
-            self.assertEqual(agent["state"], "busy")
+            self.assertEqual(task["state"], "busy")
             self.assertEqual(main([
                 "heartbeat", "--workspace", str(workspace), "--agent", "codex", "--task-id", "task-1",
             ]), 0)
@@ -37,14 +37,18 @@ class StatusTests(unittest.TestCase):
             fake_key = "AKIA" + "0" * 16
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--goal", fake_key]), 2)
 
-    def test_switching_task_resets_agent_task_fields(self):
+    def test_parallel_tasks_keep_independent_task_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "one", "--phase", "coding", "--branch", "old", "--pr", "1"]), 0)
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "two", "--phase", "docs"]), 0)
-            record = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
-            self.assertEqual(record["task_id"], "two")
-            self.assertNotIn("branch", record)
-            self.assertNotIn("pr", record)
+            agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
+            one = json.loads((Path(tmp) / ".agent-workflow/state/tasks/one.json").read_text())
+            two = json.loads((Path(tmp) / ".agent-workflow/state/tasks/two.json").read_text())
+            self.assertEqual(agent["active_task_ids"], ["one", "two"])
+            self.assertEqual(agent["current_task_id"], "two")
+            self.assertEqual(one["branch"], "old")
+            self.assertEqual(one["pr"], 1)
+            self.assertEqual(two["task_id"], "two")
 
     def test_rejects_invalid_state_combination(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,13 +58,33 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / ".agent-workflow" / "state"
             heartbeat = "2025-01-01T00:00:00+00:00"
-            path = root / "agents" / "codex.json"
-            atomic_write(path, {"agent": "codex", "state": "busy", "heartbeat_at": heartbeat})
+            path = root / "tasks" / "task-1.json"
+            atomic_write(path, {"task_id": "task-1", "agent": "codex", "state": "busy", "heartbeat_at": heartbeat})
             current = datetime(2025, 1, 1, 0, 9, 59, tzinfo=timezone.utc)
-            self.assertEqual(sweep_stale(root, 600, current), [])
+            self.assertEqual(sweep_stale(root, 600, 60, current), [])
             current = datetime(2025, 1, 1, 0, 10, 0, tzinfo=timezone.utc)
-            self.assertEqual(sweep_stale(root, 600, current), ["codex"])
+            self.assertEqual(sweep_stale(root, 600, 60, current), ["task-1"])
             self.assertEqual(json.loads(path.read_text())["state"], "stale")
+
+    def test_sweep_validates_heartbeat_ratio_and_naive_now(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["sweep", "--workspace", tmp, "--heartbeat-interval-seconds", "120", "--stale-after-seconds", "600"]), 2)
+            self.assertEqual(main(["sweep", "--workspace", tmp, "--heartbeat-interval-seconds", "120", "--stale-after-seconds", "1200", "--now", "2025-01-01T00:00:00"]), 0)
+
+    def test_state_directories_are_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs"]), 0)
+            root = Path(tmp) / ".agent-workflow"
+            self.assertEqual((root / "state").stat().st_mode & 0o777, 0o700)
+            self.assertEqual((root / "state/tasks").stat().st_mode & 0o777, 0o700)
+            self.assertEqual((root / "state/tasks/task-1.json").stat().st_mode & 0o777, 0o600)
+
+    def test_rejects_phase_status_mismatch_after_merge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "coding"]), 0)
+            self.assertEqual(main(["update", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--task-status", "ready_for_review"]), 2)
+            self.assertEqual(main(["end", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
+            self.assertEqual(main(["update", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "coding"]), 2)
 
 
 class ContextTests(unittest.TestCase):
@@ -82,7 +106,7 @@ class ContextTests(unittest.TestCase):
             self.assertEqual(result["reference_dirs"], [str(root / "docs")])
             self.assertEqual(result["screenshots"], [str(root / "Screenshot.png")])
 
-            for sensitive in (".env.local", "credentials.json", "secrets.yaml", ".ssh"):
+            for sensitive in (".env.local", "credentials.json", "secrets.yaml", "secret", "credential", ".ssh"):
                 sensitive_path = root / sensitive
                 if sensitive in {".ssh"}:
                     sensitive_path.mkdir()
@@ -114,6 +138,20 @@ class ContextTests(unittest.TestCase):
                 else:
                     os.environ["WORKSPACE"] = old_workspace
             self.assertEqual(result["repo_dir"], str(root / "task-repo"))
+
+    def test_external_nonsecret_reference_returns_warning(self):
+        with tempfile.TemporaryDirectory() as workspace_tmp, tempfile.TemporaryDirectory() as external_tmp:
+            workspace = Path(workspace_tmp)
+            external = Path(external_tmp)
+            config = workspace / "context.json"
+            config.write_text(json.dumps({
+                "workspace_root": str(workspace),
+                "allow_external_nonsecret": True,
+                "default_reference_dirs": [str(external)],
+            }))
+            result = resolve_context(config, None, None)
+            self.assertEqual(result["reference_dirs"], [str(external)])
+            self.assertTrue(result["warnings"])
 
 
 if __name__ == "__main__":

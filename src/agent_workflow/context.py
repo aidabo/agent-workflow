@@ -11,7 +11,9 @@ def sensitive_part(part: str) -> bool:
     return (
         lower == ".ssh" or lower == ".aws" or lower == ".notify" or lower == ".clawhip"
         or lower == ".env" or lower.startswith(".env.")
-        or lower.startswith("credentials") or lower.startswith("secrets")
+        or lower in {"secret", "secrets", "credential", "credentials"}
+        or lower.startswith("secret.") or lower.startswith("secrets.")
+        or lower.startswith("credential.") or lower.startswith("credentials.")
     )
 
 

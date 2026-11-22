@@ -64,3 +64,17 @@ bin/agent-status end --workspace "$WORKSPACE" --agent codex --task-id demo-001
 
 statusは`${WORKSPACE}/.agent-workflow/state/tasks/`と`agents/`へ保存される。
 context解決はJSONの`agent-context.json`とtask JSONを入力にし、secret pathは拒否する。
+
+## Parallel tasks and review isolation
+
+task状態は`task_id`ごとに独立したファイルへ保存する。同じagentが複数taskを持つ場合も、
+agent indexには`active_task_ids`を保持し、monitorはagent × taskの行で表示する。一方のtaskを
+`end`しても、他のtaskのbranch・test・review状態は変更しない。
+
+cross-reviewはPR単位の非同期状態であり、別taskのcoding/testを止めない。同じtaskのPRだけが
+`code_review`状態になる。依存関係がある場合だけtask metadataの`blocked_by`で明示的に止める。
+
+status更新はネットワークを呼ばず、task JSONをO(1)で更新する。monitor側はtmuxを短い間隔、
+GitHub/cross-reviewを長い間隔で取得し、review待ちでcoding taskの更新を止めない。
+`sweep`はcronやwatcherからheartbeatの期限ごとに実行する。`--heartbeat-interval-seconds`の
+10倍未満のstale期限は拒否される。`context`の結果には解決済みpathとwarningsが出力される。

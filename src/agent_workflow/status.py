@@ -16,6 +16,17 @@ PHASES = {
 }
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
+ALLOWED_PHASE_STATUS = {
+    "docs": {"planned", "ready", "in_progress"},
+    "docs_review": {"ready_for_review"},
+    "docs_human_review": {"ready_for_review"},
+    "assigned": {"ready", "in_progress"},
+    "coding": {"in_progress"},
+    "test": {"in_progress"},
+    "code_review": {"ready_for_review"},
+    "code_human_review": {"ready_for_review"},
+    "done": {"done"},
+}
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SECRET_VALUE = re.compile(r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,})")
 
@@ -84,36 +95,48 @@ def validate_enum(value: str | None, values: set[str], label: str) -> None:
 
 
 def validate_combination(phase: str | None, state: str | None, task_status: str | None) -> None:
+    if phase is not None and task_status is not None and task_status != "needs_human":
+        allowed = ALLOWED_PHASE_STATUS.get(phase)
+        if allowed is None or task_status not in allowed:
+            raise ValueError(f"invalid phase/task_status combination: {phase}/{task_status}")
     if phase == "done" and task_status != "done":
         raise ValueError("phase=done requires task_status=done")
+    if phase == "done" and state not in {None, "done"}:
+        raise ValueError("phase=done requires state=done")
     if task_status == "done" and phase != "done":
         raise ValueError("task_status=done requires phase=done")
+    if task_status == "done" and state not in {None, "done"}:
+        raise ValueError("task_status=done requires state=done")
     if state == "done" and (phase != "done" or task_status != "done"):
         raise ValueError("state=done requires phase=done and task_status=done")
-    if task_status == "needs_human" and state not in {None, "needs_human", "blocked", "waiting_user"}:
+    if task_status == "needs_human" and state not in {None, "needs_human", "blocked", "waiting_user", "stale"}:
         raise ValueError("task_status=needs_human requires a human-escalation state")
 
 
 def parse_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
-def sweep_stale(root: Path, stale_after_seconds: int, current: datetime | None = None) -> list[str]:
-    if stale_after_seconds < 600:
-        raise ValueError("stale_after_seconds must be at least 600")
+def sweep_stale(root: Path, stale_after_seconds: int, heartbeat_interval_seconds: int = 60, current: datetime | None = None) -> list[str]:
+    if heartbeat_interval_seconds <= 0 or stale_after_seconds < heartbeat_interval_seconds * 10:
+        raise ValueError("stale_after_seconds must be at least 10 times heartbeat_interval_seconds")
     current = current or datetime.now(timezone.utc)
     changed: list[str] = []
-    for path in sorted((root / "agents").glob("*.json")):
+    for path in sorted((root / "tasks").glob("*.json")):
         record = read_json(path)
         heartbeat = record.get("heartbeat_at")
         if record.get("state") in {"done", "stale"} or not heartbeat:
             continue
         if (current - parse_time(heartbeat)).total_seconds() >= stale_after_seconds:
+            record["previous_state"] = record.get("state")
             record["state"] = "stale"
             record["stale_at"] = current.replace(microsecond=0).isoformat()
             record["updated_at"] = current.replace(microsecond=0).isoformat()
             atomic_write(path, record)
-            changed.append(record.get("agent", path.stem))
+            changed.append(record.get("task_id", path.stem))
     return changed
 
 
@@ -174,36 +197,41 @@ def command_status(args: argparse.Namespace) -> int:
         args.phase = "done"
         state = state or "done"
         task_status = task_status or "done"
-    validate_combination(args.phase, state, task_status)
+    task_path = path_for(root, "tasks", task_id)
+    agent_path = path_for(root, "agents", agent)
+    previous_task = read_json(task_path)
+    previous_agent = read_json(agent_path)
+    effective_phase = args.phase if args.phase is not None else previous_task.get("phase")
+    effective_task_status = task_status if task_status is not None else previous_task.get("task_status")
+    effective_state = state if state is not None else previous_task.get("state")
+    validate_combination(effective_phase, effective_state, effective_task_status)
 
     task_updates = {
-        "task_id": task_id, "repo": args.repo, "repo_dir": args.repo_dir,
-        "phase": args.phase, "task_status": task_status, "goal": args.goal,
+        "task_id": task_id, "agent": agent, "repo": args.repo, "repo_dir": args.repo_dir,
+        "phase": args.phase, "state": state, "task_status": task_status, "goal": args.goal,
         "pr": args.pr, "branch": args.branch, "commit": args.commit,
         "test": ({"status": args.test_status, "summary": args.test_summary}
                   if args.test_status or args.test_summary else None),
-        "last_event": args.event, "blocked_reason": args.blocked_reason,
+        "last_event": args.event, "blocked_reason": args.blocked_reason, "heartbeat_at": timestamp,
         "updated_at": timestamp,
     }
+    previous_active = set(previous_agent.get("active_task_ids", []))
+    if args.command == "end":
+        previous_active.discard(task_id)
+    else:
+        previous_active.add(task_id)
     agent_updates = {
-        "agent": agent, "task_id": task_id, "repo": args.repo, "repo_dir": args.repo_dir,
-        "phase": args.phase, "state": state, "task_status": task_status,
-        "goal": args.goal, "pr": args.pr, "branch": args.branch, "commit": args.commit,
-        "test": ({"status": args.test_status, "summary": args.test_summary}
-                  if args.test_status or args.test_summary else None),
-        "last_event": args.event, "blocked_reason": args.blocked_reason,
+        "agent": agent, "active_task_ids": sorted(previous_active), "current_task_id": None if args.command == "end" else task_id,
         "heartbeat_at": timestamp, "updated_at": timestamp,
     }
     task = merge_record(
-        path_for(root, "tasks", task_id), task_updates,
+        task_path, task_updates,
         clear_fields={"blocked_reason"} if args.clear_blocked else set(),
     )
-    agent_path = path_for(root, "agents", agent)
-    previous_agent = read_json(agent_path)
-    reset_agent = args.command == "begin" and previous_agent.get("task_id") not in {None, task_id}
     agent_record = merge_record(
-        agent_path, agent_updates, reset=reset_agent,
-        clear_fields={"blocked_reason"} if args.clear_blocked else set(),
+        agent_path, agent_updates,
+        clear_fields=(({"current_task_id"} if args.command == "end" else set())
+                      | ({"blocked_reason"} if args.clear_blocked else set())),
     )
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
     return 0
@@ -212,7 +240,7 @@ def command_status(args: argparse.Namespace) -> int:
 def command_sweep(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
-    changed = sweep_stale(root, args.stale_after_seconds, parse_time(args.now) if args.now else None)
+    changed = sweep_stale(root, args.stale_after_seconds, args.heartbeat_interval_seconds, parse_time(args.now) if args.now else None)
     print(json.dumps({"stale_agents": changed}, ensure_ascii=False, indent=2))
     return 0
 
@@ -234,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     sweep = sub.add_parser("sweep")
     sweep.add_argument("--workspace", default=".")
     sweep.add_argument("--state-root")
+    sweep.add_argument("--heartbeat-interval-seconds", type=int, default=60)
     sweep.add_argument("--stale-after-seconds", type=int, default=600)
     sweep.add_argument("--now")
     context = sub.add_parser("context")
