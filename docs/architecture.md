@@ -2,6 +2,8 @@
 
 ## 全体構成
 
+### 移行中
+
 ```mermaid
 flowchart TB
   subgraph APP["application repositories"]
@@ -33,6 +35,28 @@ flowchart TB
   MON --> H
   H --> PR
 ```
+
+### 移行後の目標
+
+```mermaid
+flowchart TB
+  subgraph AW["11-agent-workflow (standalone)"]
+    TMUX["tmux launcher / panes"]
+    CR["local cross-review\nwatch / status / inbox"]
+    LIVE["review live log"]
+    TASK["task/status/context"]
+    MON["monitor"]
+    TMUX --> TASK --> MON
+    CR --> MON
+    LIVE --> MON
+  end
+  APP["application repositories\nsource / tests / docs / PR"] --> CR
+  H["human"] --> MON
+  H --> APP
+```
+
+移行後はTMUX/CR/LIVEも`11-agent-workflow`内のcopyが実行主体になり、`10-agent-tools`は
+read-only archiveになる。
 
 ## 責務境界
 

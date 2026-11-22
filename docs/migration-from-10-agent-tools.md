@@ -17,7 +17,7 @@ tracked sourceだけをcopyする。
   configure-stop-notify.sh
   sendtmux.sh
   stx
-  agents.yaml（workspace設定は別管理）
+  agents.yaml.template（workspace固有のpath/agent設定はcopyせず、空templateとして再作成）
 
 10-agent-tools/cross-review/
   PROTOCOL.md
@@ -30,6 +30,16 @@ tracked sourceだけをcopyする。
 copy後にagent-workflowのtask/status/context APIを追加し、旧ツールと同じ入力で同じ表示・
 review判定になることを確認する。
 
+### copy先の対応表
+
+| 移行元 | 移行先 |
+|---|---|
+| `agent-notify/start-agents.sh` | `bin/agent-start` / `src/agent_workflow/tmux_adapter.py` |
+| `agent-notify/monitor.sh` / `status.py` | `bin/agent-monitor` / `src/agent_workflow/monitor_adapter.py` |
+| `agent-notify/hooks/` / `configure-stop-notify.sh` | `src/agent_workflow/notify/` |
+| `cross-review/` | `src/agent_workflow/cross_review/` と `bin/cross-review` |
+| workspace `agents.yaml` | `${WORKSPACE}/.agent-workflow/agents.json`（環境ごとに作成） |
+
 ## copyしないもの
 
 - `.git/`
@@ -38,6 +48,17 @@ review判定になることを確認する。
 - `config.local.sh`、webhook、AWS credential、secret env
 - `inbox/`、review reports、cache、runtime state
 - `~/.notify`、`~/.clawhip`などユーザー環境の実体
+
+copy先repositoryの`.gitignore`へ、次も先に追加する。
+
+```text
+.agent-workflow/
+.cross-review/
+inbox/
+config.local.sh
+*.env
+__pycache__/
+```
 
 local configは新repositoryの形式で作り直し、secretは既存のsecret managerまたはユーザー環境
 から注入する。
@@ -48,7 +69,9 @@ local configは新repositoryの形式で作り直し、secretは既存のsecret 
 
 - launcher、monitor、cross-reviewをcopy
 - 既存`10-agent-tools`と同じtmux pane、review status、inbox通知を比較
-- `make test`とshell/node/python syntax checkを追加
+- 既存`Makefile`の`make test`を拡張し、shell/node/python syntax checkも追加
+- `git -C ../10-agent-tools ls-files`とcopy manifestを比較するinventory checkを追加
+- 同じfixture PR/inboxで、旧status/monitorと新status/monitorのsnapshotを比較するbehavior lockを実行
 
 ### 2. task/status統合
 

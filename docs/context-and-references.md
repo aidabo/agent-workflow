@@ -3,6 +3,8 @@
 ## workspace設定
 
 workspace（例: `${WORKSPACE}`）はgit管理外で、repositoryごとの設定をまとめる。
+下の`${WORKSPACE}/11-agent-workflow`参照は切替後の設定例である。移行中は、旧cross-reviewや
+launcherの参照を`${WORKSPACE}/10-agent-tools`に残し、cutover後に新pathへ切り替える。
 
 ```json
 {
