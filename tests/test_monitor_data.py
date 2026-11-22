@@ -1,0 +1,67 @@
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from agent_workflow.monitor_data import format_task_lines, task_records
+
+
+class MonitorDataTests(unittest.TestCase):
+    def test_formats_multiple_tasks_without_network(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            for task_id, agent in (("a", "codex"), ("b", "claude")):
+                (root / "tasks" / f"{task_id}.json").write_text(json.dumps({
+                    "task_id": task_id, "agent": agent, "phase": "coding", "state": "busy",
+                    "heartbeat_at": "2025-01-01T00:00:00+00:00", "test": {"status": "passed"},
+                }))
+            records = task_records(root)
+            self.assertEqual({record["task_id"] for record in records}, {"a", "b"})
+            lines = format_task_lines(root)
+            self.assertEqual(len(lines), 2)
+            self.assertTrue(any("codex" in line and "a" in line for line in lines))
+            self.assertTrue(any("claude" in line and "b" in line for line in lines))
+
+    def test_corrupt_task_is_visible_as_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/bad.json").write_text("{")
+            self.assertIn("ERROR", format_task_lines(root)[0])
+            (root / "tasks/list.json").write_text("[]")
+            self.assertTrue(any("list" in line and "ERROR" in line for line in format_task_lines(root)))
+
+    def test_completed_tasks_are_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            for index in range(12):
+                (root / "tasks" / f"done-{index}.json").write_text(json.dumps({
+                    "task_id": f"done-{index}", "state": "done", "updated_at": f"2025-01-{index + 1:02d}"
+                }))
+            lines = format_task_lines(root, max_rows=3)
+            self.assertEqual(len(lines), 4)
+            self.assertIn("他 9 task", lines[-1])
+
+    def test_missing_test_status_is_displayed_as_dash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "test": {"status": None, "summary": "running"}
+            }))
+            self.assertIn("test=-", format_task_lines(root)[0])
+
+    def test_active_tasks_are_before_completed_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/done.json").write_text(json.dumps({"task_id": "done", "state": "done", "updated_at": "2025-01-02"}))
+            (root / "tasks/active.json").write_text(json.dumps({"task_id": "active", "state": "busy", "updated_at": "2025-01-01"}))
+            lines = format_task_lines(root)
+            self.assertIn("active", lines[0])

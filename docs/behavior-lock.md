@@ -61,6 +61,9 @@ bash cross-review/status.sh > "$LOCK_WORKSPACE/new/review.txt"
 環境依存の時刻、API取得順、host pathを正規化して比較する。PRの判定名、author/reviewer、
 APPROVED/CHANGES REQUESTED/NEEDS YOU、pane state分類が一致することを確認する。
 
+standalone側だけtask sectionが追加されるため、旧/新snapshotではcross-review sectionとpane
+state sectionを比較し、standaloneのtask sectionは新機能として別に確認する。
+
 ## 4. 並列taskの確認
 
 ```bash
