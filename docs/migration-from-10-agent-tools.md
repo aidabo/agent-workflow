@@ -17,7 +17,8 @@ tracked sourceだけをcopyする。
   configure-stop-notify.sh
   sendtmux.sh
   stx
-  agents.yaml.template（workspace固有のpath/agent設定はcopyせず、空templateとして再作成）
+  agents.yaml（移行元のfallback baseline。workspace固有のpath/agent設定はcopyせず、
+  `agents.example.json`として再作成）
 
 10-agent-tools/cross-review/
   PROTOCOL.md
@@ -32,12 +33,19 @@ review判定になることを確認する。
 
 ### copy先の対応表
 
+今回の初回copyはbehavior lockを優先し、source layoutをそのまま維持する。`src/`や`bin/`への
+再配置はbehavior比較後の別taskで行う。
+
 | 移行元 | 移行先 |
 |---|---|
-| `agent-notify/start-agents.sh` | `bin/agent-start` / `src/agent_workflow/tmux_adapter.py` |
-| `agent-notify/monitor.sh` / `status.py` | `bin/agent-monitor` / `src/agent_workflow/monitor_adapter.py` |
-| `agent-notify/hooks/` / `configure-stop-notify.sh` | `src/agent_workflow/notify/` |
-| `cross-review/` | `src/agent_workflow/cross_review/` と `bin/cross-review` |
+| `agent-notify/start-agents.sh` | `agent-notify/start-agents.sh` / `bin/agent-start` |
+| `agent-notify/monitor.sh` / `status.py` | `agent-notify/monitor.sh` / `agent-notify/status.py` / `bin/agent-monitor` |
+| `agent-notify/monitor-hook-log.py` | `agent-notify/monitor-hook-log.py` |
+| `agent-notify/hooks/` / `configure-stop-notify.sh` | `agent-notify/hooks/` / `agent-notify/configure-stop-notify.sh` |
+| `agent-notify/sendtmux.sh` / `stx` | `agent-notify/sendtmux.sh` / `agent-notify/stx` |
+| `cross-review/` | `cross-review/` / `bin/cross-review` |
+| `cross-review/secret_scan.py` | `cross-review/secret_scan.py` |
+| `cross-review/PROTOCOL.md` / `README.md` | `cross-review/PROTOCOL.md` / `cross-review/README.md` |
 | workspace `agents.yaml` | `${WORKSPACE}/.agent-workflow/agents.json`（環境ごとに作成） |
 
 ## copyしないもの

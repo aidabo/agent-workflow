@@ -582,15 +582,8 @@ data = json.loads(path.read_text())
 default = data.get("default", {})
 if not isinstance(default, dict):
     default = {}
-data = {
-    "default": {
-        "webhook_env": default.get("webhook_env", "DISCORD_WEBHOOK_URL"),
-        "mention": default.get("mention", ""),
-        "capture_lines": default.get("capture_lines", 400),
-        "chunk_size": default.get("chunk_size", 3200),
-        "chunk_delay_ms": default.get("chunk_delay_ms", 1000),
-    }
-}
+data["default"] = default
+data["routes"] = []
 path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 PY
   echo "Cleared all route entries; default settings kept in $CONFIG_PATH"

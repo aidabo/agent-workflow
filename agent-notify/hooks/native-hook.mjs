@@ -106,8 +106,11 @@ function describeTmuxTarget(tmuxMetadata) {
 }
 
 function writeJsonFile(path, data) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
+  const directory = dirname(path);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  chmodSync(directory, 0o700);
+  writeFileSync(path, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+  chmodSync(path, 0o600);
 }
 
 function logHookInvocation(provider, eventName, tmuxMetadata, cwd, extra = {}) {
@@ -126,7 +129,8 @@ function logHookInvocation(provider, eventName, tmuxMetadata, cwd, extra = {}) {
       extra.worktreeRoot ? `worktree_root=${extra.worktreeRoot}` : '',
       extra.paneRole ? `pane_role=${extra.paneRole}` : '',
     ].join(' ');
-    mkdirSync(dirname(HOOK_INVOCATION_LOG_PATH), { recursive: true });
+    mkdirSync(dirname(HOOK_INVOCATION_LOG_PATH), { recursive: true, mode: 0o700 });
+    chmodSync(dirname(HOOK_INVOCATION_LOG_PATH), 0o700);
     appendFileSync(HOOK_INVOCATION_LOG_PATH, `${line}\n`);
     console.error(`[notify] native-hook called ${line}`);
   } catch {}
@@ -1582,8 +1586,10 @@ function writePaneCaptureState(tmuxMetadata, tmuxTarget, outputText, captureOk) 
       capture_ok: captureOk,
       content_path: path,
     });
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${String(outputText || '').replace(/\n?$/, '\n')}`);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    chmodSync(dirname(path), 0o700);
+    writeFileSync(path, `${String(outputText || '').replace(/\n?$/, '\n')}`, { mode: 0o600 });
+    chmodSync(path, 0o600);
     return path;
   } catch {
     return '';
