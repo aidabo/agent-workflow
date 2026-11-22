@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -148,14 +149,25 @@ def sweep_stale(root: Path, stale_after_seconds: int, heartbeat_interval_seconds
     return changed
 
 
-def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, clear_fields: set[str] | None = None) -> dict[str, Any]:
-    record = {} if reset else read_json(path)
-    for field in clear_fields or set():
-        record.pop(field, None)
-    record.update({key: value for key, value in updates.items() if value is not None})
-    record["updated_at"] = now()
-    atomic_write(path, record)
-    return record
+def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, clear_fields: set[str] | None = None, lock: bool = False) -> dict[str, Any]:
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_stream = open(lock_path, "a+", encoding="utf-8") if lock else None
+    try:
+        if lock_stream:
+            os.chmod(lock_path, 0o600)
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        record = {} if reset else read_json(path)
+        for field in clear_fields or set():
+            record.pop(field, None)
+        record.update({key: value for key, value in updates.items() if value is not None})
+        record["updated_at"] = now()
+        atomic_write(path, record)
+        return record
+    finally:
+        if lock_stream:
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+            lock_stream.close()
 
 
 def common_parser(parser: argparse.ArgumentParser) -> None:
@@ -209,6 +221,10 @@ def command_status(args: argparse.Namespace) -> int:
     agent_path = path_for(root, "agents", agent)
     previous_task = read_json(task_path)
     previous_agent = read_json(agent_path)
+    if args.command == "heartbeat" and args.state is None:
+        state = previous_task.get("state") or "busy"
+        if state == "stale":
+            state = previous_task.get("previous_state") or "busy"
     if args.command != "end" and previous_task.get("task_status") == "done":
         raise ValueError("cannot update a completed task; begin a new task_id")
     effective_phase = args.phase if args.phase is not None else previous_task.get("phase")
@@ -249,6 +265,7 @@ def command_status(args: argparse.Namespace) -> int:
         agent_path, agent_updates,
         clear_fields=(({"current_task_id"} if current_task_id is None else set())
                       | ({"blocked_reason"} if args.clear_blocked else set())),
+        lock=True,
     )
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
     return 0

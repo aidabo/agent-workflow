@@ -98,7 +98,21 @@ class StatusTests(unittest.TestCase):
 
     def test_phase_and_state_rules(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--state", "busy"]), 2)
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "busy"]), 2)
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "waiting_user"]), 0)
+
+    def test_heartbeat_preserves_human_state_and_recovers_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "waiting_user"]), 0)
+            self.assertEqual(main(["heartbeat", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
+            task_path = Path(tmp) / ".agent-workflow/state/tasks/task-1.json"
+            self.assertEqual(json.loads(task_path.read_text())["state"], "waiting_user")
+            record = json.loads(task_path.read_text())
+            record["state"] = "stale"
+            record["previous_state"] = "waiting_user"
+            task_path.write_text(json.dumps(record))
+            self.assertEqual(main(["heartbeat", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
+            self.assertEqual(json.loads(task_path.read_text())["state"], "waiting_user")
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-2", "--phase", "docs_review"]), 0)
 
 
