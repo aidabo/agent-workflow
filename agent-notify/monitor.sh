@@ -19,14 +19,15 @@ done
 
 script_dir="$(dirname "$(readlink -f "$0")")"
 session="${AGENTS_MONITOR_SESSION:-agents-monitor}"
+workflow_workspace="${AGENT_WORKFLOW_WORKSPACE:-${AGENTS_PROJECT_ROOT:-$(pwd)}}"
 
 live_script="$script_dir/../cross-review/live.sh"
 
 if ! tmux has-session -t "=$session" 2>/dev/null; then
-  board="$(tmux new-session -d -P -F '#{pane_id}' -s "$session" -n status "python3 $(printf '%q' "$script_dir/status.py")")"
+  board="$(tmux new-session -d -P -F '#{pane_id}' -s "$session" -n status -c "$workflow_workspace" "AGENT_WORKFLOW_WORKSPACE=$(printf '%q' "$workflow_workspace") python3 $(printf '%q' "$script_dir/status.py")")"
   tmux select-pane -t "$board" -T "board"
   if [[ -f "$live_script" ]]; then
-    live="$(tmux split-window -v -l 45% -P -F '#{pane_id}' -t "$board" "bash $(printf '%q' "$live_script")")"
+    live="$(tmux split-window -v -l 45% -P -F '#{pane_id}' -t "$board" -c "$workflow_workspace" "bash $(printf '%q' "$live_script")")"
     tmux select-pane -t "$live" -T "review — live"
     tmux select-pane -t "$board"
   fi

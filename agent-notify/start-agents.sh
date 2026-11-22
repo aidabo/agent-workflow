@@ -492,7 +492,7 @@ else
 fi
 
 # ── Status board in its own session (monitor.sh; switch to it when you want to look) ─
-bash "$script_dir/monitor.sh" --detach || true
+AGENT_WORKFLOW_WORKSPACE="$repo_root" bash "$script_dir/monitor.sh" --detach || true
 
 # ── Attach ────────────────────────────────────────────────────
 echo "[start-agents] Attaching to session '$launch_session'."

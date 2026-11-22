@@ -33,3 +33,17 @@ class MonitorDataTests(unittest.TestCase):
             (root / "tasks").mkdir(parents=True)
             (root / "tasks/bad.json").write_text("{")
             self.assertIn("ERROR", format_task_lines(root)[0])
+            (root / "tasks/list.json").write_text("[]")
+            self.assertTrue(any("list" in line and "ERROR" in line for line in format_task_lines(root)))
+
+    def test_completed_tasks_are_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            for index in range(12):
+                (root / "tasks" / f"done-{index}.json").write_text(json.dumps({
+                    "task_id": f"done-{index}", "state": "done", "updated_at": f"2025-01-{index + 1:02d}"
+                }))
+            lines = format_task_lines(root, max_rows=3)
+            self.assertEqual(len(lines), 4)
+            self.assertIn("他 9 task", lines[-1])

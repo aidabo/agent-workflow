@@ -189,7 +189,7 @@ def review_lines_free() -> int:
 
 def frame(reviews: ReviewStatus) -> str:
     agents = agent_lines()
-    tasks = format_task_lines()
+    tasks = format_task_lines(max_rows=8)
     AGENT_ROWS[0] = len(agents)
     TASK_ROWS[0] = len(tasks)
     return "\n".join([

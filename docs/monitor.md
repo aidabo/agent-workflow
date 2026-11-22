@@ -2,7 +2,8 @@
 
 ## 画面構成
 
-既存cross-reviewの表示は残し、その下または横にagent/task metadataを表示する。
+既存cross-reviewの表示は残し、その下または横にagent/task metadataを表示する。monitor paneの
+workspaceは`AGENT_WORKFLOW_WORKSPACE`で渡し、未指定時だけ現在のcwdを使う。
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
