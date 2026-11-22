@@ -11,7 +11,7 @@
 | status保存 | `${WORKSPACE}/.agent-workflow/state/tasks/<task_id>.json` / `agents/<agent>.json`。directory `0700`、file `0600`、temp file + renameのatomic write |
 | monitor | `10-agent-tools/agent-notify/status.py`の既存表示をadapter経由で拡張 |
 | cross-review | 10-agent-tools adapter、再実装しない |
-| config | YAMLまたはJSON。初期は依存追加を避ける |
+| config | JSON + Python標準ライブラリ。初期にYAML依存を追加しない |
 
 ## 段階
 

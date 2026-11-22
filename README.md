@@ -44,3 +44,20 @@ flowchart LR
 
 最初はstatus metadataとmonitor表示だけを実装する。task自動割当、agent自動起動、自動mergeは
 後回しにする。人の判断境界を保ったまま、現在の「何をしているか分かりにくい」問題を解消する。
+
+## Phase 1 quick start
+
+```bash
+export WORKSPACE="$PWD"
+bin/agent-status begin \
+  --workspace "$WORKSPACE" --agent codex --task-id demo-001 \
+  --repo aidabo/agent-workflow --repo-dir . --phase coding \
+  --goal "Phase 1 status helperを確認"
+bin/agent-status heartbeat --workspace "$WORKSPACE" --agent codex --task-id demo-001
+bin/agent-status test --workspace "$WORKSPACE" --agent codex --task-id demo-001 \
+  --test-status passed --test-summary "unit tests"
+bin/agent-status end --workspace "$WORKSPACE" --agent codex --task-id demo-001
+```
+
+statusは`${WORKSPACE}/.agent-workflow/state/tasks/`と`agents/`へ保存される。
+context解決はJSONの`agent-context.json`とtask JSONを入力にし、secret pathは拒否する。
