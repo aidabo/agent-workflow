@@ -129,9 +129,12 @@ function logHookInvocation(provider, eventName, tmuxMetadata, cwd, extra = {}) {
       extra.worktreeRoot ? `worktree_root=${extra.worktreeRoot}` : '',
       extra.paneRole ? `pane_role=${extra.paneRole}` : '',
     ].join(' ');
-    mkdirSync(dirname(HOOK_INVOCATION_LOG_PATH), { recursive: true, mode: 0o700 });
-    chmodSync(dirname(HOOK_INVOCATION_LOG_PATH), 0o700);
-    appendFileSync(HOOK_INVOCATION_LOG_PATH, `${line}\n`);
+    const logDirectory = dirname(HOOK_INVOCATION_LOG_PATH);
+    mkdirSync(logDirectory, { recursive: true, mode: 0o700 });
+    chmodSync(logDirectory, 0o700);
+    if (existsSync(HOOK_INVOCATION_LOG_PATH)) chmodSync(HOOK_INVOCATION_LOG_PATH, 0o600);
+    appendFileSync(HOOK_INVOCATION_LOG_PATH, `${line}\n`, { mode: 0o600 });
+    chmodSync(HOOK_INVOCATION_LOG_PATH, 0o600);
     console.error(`[notify] native-hook called ${line}`);
   } catch {}
 }

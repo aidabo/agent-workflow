@@ -17,8 +17,7 @@ tracked sourceだけをcopyする。
   configure-stop-notify.sh
   sendtmux.sh
   stx
-  agents.yaml（移行元のfallback baseline。workspace固有のpath/agent設定はcopyせず、
-  `agents.example.json`として再作成）
+  agents.yaml（移行元のfallback baseline。workspace固有のpath/agent設定は別管理し、copy後に確認）
 
 10-agent-tools/cross-review/
   PROTOCOL.md
@@ -85,6 +84,7 @@ target-only差分をtracked file listで比較し、差分が無いことを確�
 - 既存`Makefile`の`make test`を拡張し、shell/node/python syntax checkも追加
 - `git -C ../10-agent-tools ls-files`とcopy manifestを比較するinventory checkを追加
 - 同じfixture PR/inboxで、旧status/monitorと新status/monitorのsnapshotを比較するbehavior lockを実行
+- 段階1では新repositoryの`cross-review/install.sh`を実行しない。cron切替は段階3だけで行う
 
 ### 2. task/status統合
 
