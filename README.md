@@ -42,6 +42,20 @@ flowchart LR
 - [implementation-plan.md](docs/implementation-plan.md) — Python/shell実装、段階導入、test計画
 - [migration-from-10-agent-tools.md](docs/migration-from-10-agent-tools.md) — copy範囲、除外範囲、切替、rollback
 
+## Copied runtime
+
+移行段階1では、`agent-notify/`と`cross-review/`へ10-agent-toolsのtracked runtimeをcopyしている。
+直接使う入口は次のwrapperである。
+
+```bash
+bin/agent-start       # tmux agentsを起動
+bin/agent-monitor     # monitorへ移動
+bin/agent-status      # task/heartbeat/status metadata
+bin/cross-review      # local cross-review
+```
+
+`cross-review/config.local.sh`、inbox、review report、runtime state、secretは各環境で作る。
+
 ## 最初の判断
 
 最初はstatus metadataとmonitor表示だけを実装する。task自動割当、agent自動起動、自動mergeは
