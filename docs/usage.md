@@ -6,7 +6,12 @@
 ## 初回設定
 
 ```bash
-cd /home/aidabo/work/legacy/11-agent-workflow
+WORKFLOW_HOME=/path/to/11-agent-workflow
+WORKFLOW="$WORKFLOW_HOME/bin/agent-workflow"
+```
+
+```bash
+cd "$WORKFLOW_HOME"
 cp cross-review/config.local.example.sh cross-review/config.local.sh
 ```
 
@@ -22,24 +27,23 @@ REPOS=(
 各要素は、表示名、GitHub repository、作者の作業tree、review用worktreeの順番である。
 
 ```bash
-/home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow check
+"$WORKFLOW" check
 ```
 
-`gh auth status`、`python3`、`flock`、`REPOS`が確認される。
+`gh auth status`、`python3`、`flock`、`tmux`、`REPOS`が確認される。
 
 ## プロジェクトからの起動
 
 アプリrepositoryのルートから呼び出す。
 
 ```bash
-WORKFLOW=/home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow
 "$WORKFLOW" agent
 "$WORKFLOW" monitor
 "$WORKFLOW" status begin \
   --workspace "$PWD" --agent codex --task-id task-001 \
   --repo aidabo/jibunsee-react --repo-dir "$PWD" --phase coding \
   --goal "実装する"
-"$WORKFLOW" review
+"$WORKFLOW" review jibunsee-react 123
 ```
 
 利用者が通常使う入口は`agent`と`monitor`の2つである。`agent`は設定確認後にtmux agentを起動し、`monitor`は監視画面を開く。`status`、`review`、`gate`、`observe`は個別操作やcron用の上級者向け入口として残している。
@@ -103,7 +107,7 @@ export AUTO_MERGE_OBSERVE_LOCK="$HOME/.cache/agent-workflow/observe.lock"
 ## cron
 
 ```cron
-*/5 * * * * /home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow observe >> $HOME/.cache/agent-workflow/observe.cron.log 2>&1
+*/5 * * * * /path/to/11-agent-workflow/bin/agent-workflow observe >> $HOME/.cache/agent-workflow/observe.cron.log 2>&1
 ```
 
 cron環境では`gh`、`python3`、`flock`がPATHにあることを確認する。observerは重複起動をlockで防ぎ、一覧取得・gate異常時は非0終了する。

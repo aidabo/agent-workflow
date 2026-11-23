@@ -14,7 +14,7 @@ commands:
   start       start configured tmux agents
   monitor     open the agent monitor
   status      read or update task status metadata
-  review      run or inspect cross-review
+  review      review one PR: <repo-name> <pr-number>
   gate        dry-run one PR: --repo=<name> --pr=<number>
   observe     dry-run all open PRs with automation:auto-merge
 EOF
@@ -28,8 +28,10 @@ check_config() {
     return 2
   }
   command -v gh >/dev/null || { echo "missing command: gh" >&2; return 2; }
+  gh auth status >/dev/null 2>&1 || { echo "gh is not authenticated" >&2; return 2; }
   command -v python3 >/dev/null || { echo "missing command: python3" >&2; return 2; }
   command -v flock >/dev/null || { echo "missing command: flock" >&2; return 2; }
+  command -v tmux >/dev/null || { echo "missing command: tmux" >&2; return 2; }
   CROSS_REVIEW_CONFIG="$config" source "$root/cross-review/config.sh"
   (( ${#REPOS[@]} > 0 )) || { echo "REPOS is empty in $config" >&2; return 2; }
   echo "OK: config=$config repos=${#REPOS[@]} gh=$(command -v gh) flock=$(command -v flock)"
@@ -45,7 +47,7 @@ case "$command_name" in
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
   review) exec "$root/bin/cross-review" "$@" ;;
-  gate) exec "$root/bin/agent-merge-gate" "$@" ;;
-  observe) exec "$root/bin/agent-merge-observe" "$@" ;;
+  gate) check_config; exec "$root/bin/agent-merge-gate" "$@" ;;
+  observe) check_config; exec "$root/bin/agent-merge-observe" "$@" ;;
   *) echo "unknown command: $command_name" >&2; usage >&2; exit 64 ;;
 esac
