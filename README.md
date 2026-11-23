@@ -1,117 +1,194 @@
 # agent-workflow
 
-AIエージェント開発の目的・task・phase・test・PR・参照資料を一つの状態として扱い、
-tmux monitorで見えるようにするための独立repositoryである。
+`11-agent-workflow`は、Claude・Codex・DeepSeekなどのagentをtmuxで動かし、task、test、PR、cross-review、heartbeatを一つのmonitorで確認するためのstandalone runtimeです。
 
-## repositoryの境界
+旧`10-agent-tools`の後継ですが、移行中は両方を混ぜずに使い分けます。
 
-このrepositoryは、移行完了後に`10-agent-tools`の後継として利用する。
+## 1. repositoryの役割
 
-| repository | 責務 |
+| repository | 役割 |
 |---|---|
-| `10-agent-tools` | 移行元。既存のtmux起動、pane通知、cross-review、review inbox |
-| `11-agent-workflow` | copyした運用機能 + 目的/task metadata、heartbeat、reference解決、monitor表示 |
-| application repository | 製品コード、docs、実装PR、テスト |
+| `10-agent-tools` | 旧runtime。移行中のrollback用に保持 |
+| `11-agent-workflow` | 新runtime。task状態、monitor、cross-review、storage分離 |
+| application repository | 製品コード、docs、実装PR、test |
 
-移行中は`10-agent-tools`を動作確認用の移行元として使う。移行完了後はworkspaceのlauncher、
-monitor、cross-reviewの参照先を`11-agent-workflow`へ切り替え、旧repositoryをread-only archiveにする。
-review protocol、cron、inbox、PR label、review上限のbehaviorはcopy後も維持する。
+新runtimeへの切り替え後も、旧runtimeのcron、report、state、inbox、worktreeは削除しません。
 
-## 目標の流れ
+## 2. 最短セットアップ
 
-```mermaid
-flowchart LR
-  H["人: 目的・完了条件"] --> D["docs task"]
-  D --> DP["docs PR"]
-  DP --> DR["cross-review"]
-  DR --> HM1["人: docs確認/merge"]
-  HM1 --> T["実装task割当"]
-  T --> C["coding"]
-  C --> V["test"]
-  V --> CP["code PR"]
-  CP --> CR["cross-review"]
-  CR --> HM2["人: 最終確認/merge"]
+workspaceを次のようにします。
+
+```text
+~/work/legacy/
+├── agents.yaml
+├── 01-ghost-front/
+├── 11-agent-workflow/
+└── ...
 ```
 
-## 設計資料
+### agents.yamlの探索順
 
-- [architecture.md](docs/architecture.md) — repository境界とコンポーネント構成
-- [workflow.md](docs/workflow.md) — docs reviewからcode reviewまでの状態遷移
-- [context-and-references.md](docs/context-and-references.md) — screenshot/reference folder設定
-- [monitor.md](docs/monitor.md) — 現在のcross-review表示を残したmonitor設計
-- [implementation-plan.md](docs/implementation-plan.md) — Python/shell実装、段階導入、test計画
-- [migration-from-10-agent-tools.md](docs/migration-from-10-agent-tools.md) — copy範囲、除外範囲、切替、rollback
-- [phase2-live-smoke.md](docs/phase2-live-smoke.md) — standalone monitorの一時tmux/workspace smoke
-- [behavior-lock.md](docs/behavior-lock.md) — copy manifest、old/new snapshot、parallel task検証
-- [auto-merge-gate.md](docs/auto-merge-gate.md) — 両レビュアー承認を判定するdry-run gate
-- [storage-separation.md](docs/storage-separation.md) — 10-agent-toolsと11-agent-workflowの保存領域・切り戻し
-- [usage.md](docs/usage.md) — プロジェクトからagent workflowを起動する設定とcommand
+agent起動時は次の順で設定を探します。
 
-## Copied runtime
+1. `AGENTS_YAML`で明示したファイル
+2. workspace直下の`agents.yaml`
+3. `11-agent-workflow/agent-notify/agents.yaml`のfallback
 
-移行段階1では、`agent-notify/`と`cross-review/`へ10-agent-toolsのtracked runtimeをcopyしている。
-直接使う入口は次のwrapperである。
+projectごとにagent構成を管理する場合は、workspace直下の`agents.yaml`を推奨します。
+10-agent-toolsと11-agent-workflowを同時に使う期間は、`session:`を明示してtmux sessionを分けます。
+
+### cross-review設定
 
 ```bash
-bin/agent-start       # tmux agentsを起動（内部入口）
-bin/agent-monitor     # monitorへ移動
-bin/agent-status      # task/heartbeat/status metadata
-bin/cross-review      # local cross-review
-bin/agent-workflow    # project-facing command router（通常は agent / monitor）
+cd ~/work/legacy/11-agent-workflow
+cp cross-review/config.local.example.sh cross-review/config.local.sh
 ```
 
-`cross-review/config.local.sh`、inbox、review report、runtime state、secretは各環境で作る。
-
-## 最初の判断
-
-最初はstatus metadataとmonitor表示だけを実装する。task自動割当、agent自動起動、自動mergeは
-後回しにする。人の判断境界を保ったまま、現在の「何をしているか分かりにくい」問題を解消する。
-
-auto-mergeはPhase 4でdry-runから段階導入する。`bin/agent-merge-gate`は判定だけを行い、
-GitHubへのmerge操作はしない。
-
-## Phase 1 quick start
+`REPOS`は次の形式です。
 
 ```bash
-export WORKSPACE="$PWD"
-bin/agent-status begin \
-  --workspace "$WORKSPACE" --agent codex --task-id demo-001 \
-  --repo aidabo/agent-workflow --repo-dir . --phase coding \
-  --goal "Phase 1 status helperを確認"
-bin/agent-status heartbeat --workspace "$WORKSPACE" --agent codex --task-id demo-001
-bin/agent-status test --workspace "$WORKSPACE" --agent codex --task-id demo-001 \
-  --test-status passed --test-summary "unit tests"
-bin/agent-status sweep --workspace "$WORKSPACE" --stale-after-seconds 600
-bin/agent-status context \
-  --context-file "$WORKSPACE/agent-context.json" --project 01-ghost-front
-bin/agent-status end --workspace "$WORKSPACE" --agent codex --task-id demo-001
+REPOS=(
+  "jibunsee-react|aidabo/jibunsee-react|$HOME/work/legacy/01-ghost-front|$HOME/work/legacy/01-ghost-front-agent-workflow-review"
+  "agent-workflow|aidabo/agent-workflow|$HOME/work/legacy/11-agent-workflow|$HOME/work/legacy/11-agent-workflow-agent-workflow-review"
+)
 ```
 
-statusは`${WORKSPACE}/.agent-workflow/state/tasks/`と`agents/`へ保存される。
-context解決はJSONの`agent-context.json`とtask JSONを入力にし、secret pathは拒否する。
+4列目は、10-agent-toolsと共有しないreview専用worktreeです。
 
-## Parallel tasks and review isolation
+### 設定確認
 
-task状態は`task_id`ごとに独立したファイルへ保存する。同じagentが複数taskを持つ場合も、
-agent indexには`active_task_ids`を保持し、monitorはagent × taskの行で表示する。一方のtaskを
-`end`しても、他のtaskのbranch・test・review状態は変更しない。
+```bash
+bin/agent-workflow check
+```
 
-agent indexの例:
+`gh`認証、`python3`、`flock`、`tmux`、`REPOS`を確認します。
+
+## 3. 普段使うcommand
+
+通常利用はこの2つです。
+
+```bash
+bin/agent-workflow agent
+bin/agent-workflow monitor
+```
+
+| command | 意味 |
+|---|---|
+| `agent` | 設定を確認してtmuxのagent paneを起動 |
+| `monitor` | agent、task、PR、review状態を表示 |
+
+application repositoryのpackage.jsonから呼ぶ場合は、次のようにします。
 
 ```json
 {
-  "agent": "codex",
-  "active_task_ids": ["runner-001", "stack-042"],
-  "current_task_id": "stack-042"
+  "scripts": {
+    "agent": "bash $HOME/work/legacy/11-agent-workflow/bin/agent-workflow agent",
+    "monitor": "bash $HOME/work/legacy/11-agent-workflow/bin/agent-workflow monitor"
+  }
 }
 ```
 
-task JSONが各taskのphase/state/testの正であり、agent indexは一覧・current taskの索引だけを持つ。
+## 4. taskの進め方
 
-cross-reviewはPR単位の非同期状態であり、別taskのcoding/testを止めない。同じtaskのPRだけが
-`code_review`状態になる。依存関係がある場合だけtask metadataの`blocked_by`で明示的に止める。
+実装agentのpaneへ要件を自然文で伝えます。
 
-status更新はネットワークを呼ばず、task JSONをO(1)で更新する。monitor側はtmuxを短い間隔、
-GitHub/cross-reviewを長い間隔で取得し、review待ちでcoding taskの更新を止めない。
-`sweep`はcronやwatcherからheartbeatの期限ごとに実行する。`--heartbeat-interval-seconds`の
-10倍未満のstale期限は拒否される。`context`の結果には解決済みpathとwarningsが出力される。
+```text
+この目的をplanに整理し、独立taskは分割して並列に進めてください。
+完了条件、test、PR、review条件もtaskごとに決めてください。
+```
+
+現在はagentがplanとtask分割を行い、`agent-status`で状態を登録します。自動planner・自動assignerはまだ実装していません。
+
+task状態の例：
+
+```bash
+bin/agent-workflow status begin \
+  --workspace "$PWD" --agent codex --task-id task-001 \
+  --repo aidabo/jibunsee-react --repo-dir "$PWD" --phase coding \
+  --goal "機能を実装する"
+
+bin/agent-workflow status heartbeat \
+  --workspace "$PWD" --agent codex --task-id task-001
+```
+
+taskの流れは次のとおりです。
+
+```text
+planned → ready → in_progress → ready_for_review → done
+                                      ↓
+                                needs_human
+```
+
+## 5. PRとcross-review
+
+通常の流れは次のとおりです。
+
+```text
+要件 → plan/docs → task分割 → coding → test → PR → cross-review → 人がmerge
+```
+
+手動で1件のレビューを開始する場合：
+
+```bash
+bin/agent-workflow review jibunsee-react 123
+```
+
+NEEDS YOUやレビュー上限後に、人が続行を決めた場合：
+
+```bash
+bin/agent-workflow review jibunsee-react 123 --force
+```
+
+agent paneへは次のように自然文で指示できます。
+
+```text
+NEEDS YOUなので、PR #123を再確認してください。指摘があれば修正し、test後にpushして再レビューしてください。
+```
+
+`--force`はレビュー上限を解除するだけで、自動mergeは実行しません。mergeは人が判断します。
+
+## 6. cron
+
+cronは必要な場合だけ設定します。
+
+| 種類 | 役割 |
+|---|---|
+| cross-review watch | 未レビューPRを定期的に探してreviewerを起動 |
+| merge observer | `automation:auto-merge`付きPRをdry-run観測 |
+
+まとめて確認・登録・解除できます。
+
+```bash
+bin/agent-workflow cron check
+bin/agent-workflow cron install
+bin/agent-workflow cron uninstall
+```
+
+`agent`や`monitor`を起動するだけならcronは不要です。`cron install`は11側のmarker付き行と11側observerだけを管理し、10-agent-toolsのcron行は変更しません。
+
+## 7. 保存場所と旧runtimeからの切り替え
+
+| データ | 10-agent-tools | 11-agent-workflow |
+|---|---|---|
+| review report | `.agent-tools/reviews/` | `.agent-workflow/reviews/` |
+| review state | `~/.cache/cross-review/state/` | `~/.cache/agent-workflow/cross-review/state/` |
+| inbox | `10-agent-tools/cross-review/inbox/` | `11-agent-workflow/cross-review/inbox/` |
+| review worktree | `<project>-review` | `<project>-agent-workflow-review` |
+| agent session | 旧設定 | `<workspace>-agent-workflow-agents` |
+| monitor session | `agents-monitor` | `agent-workflow-monitor` |
+
+切り替えは、canary repositoryで新領域を確認してから全repositoryへ広げます。両runtimeで同じPRを同時にreviewしないでください。
+
+問題があれば、11側のcronを解除して10側へ戻せます。旧report、state、inbox、worktreeは削除しません。
+
+詳細：[docs/storage-separation.md](docs/storage-separation.md)
+
+## 8. 詳細資料
+
+- [docs/usage.md](docs/usage.md)：command・設定・cronの詳細
+- [docs/workflow.md](docs/workflow.md)：task state machine
+- [docs/architecture.md](docs/architecture.md)：構成とrepository境界
+- [docs/context-and-references.md](docs/context-and-references.md)：screenshot/reference設定
+- [docs/monitor.md](docs/monitor.md)：monitor設計
+- [docs/auto-merge-gate.md](docs/auto-merge-gate.md)：auto-merge dry-run
+- [docs/storage-separation.md](docs/storage-separation.md)：旧runtimeとの分離・rollback
