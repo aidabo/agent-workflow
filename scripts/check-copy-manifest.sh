@@ -17,7 +17,10 @@ target_manifest="$(mktemp)"
 trap 'rm -f "$source_manifest" "$target_manifest"' EXIT
 
 git -C "$source_root" ls-tree -r --name-only "$source_ref" -- agent-notify cross-review | sort >"$source_manifest"
-git -C "$repo_root" ls-files -- agent-notify cross-review | sort >"$target_manifest"
+# cross-review/merge_gate.py is standalone workflow code, not a copied runtime
+# file. Keep it explicit so future copied files still fail closed on drift.
+git -C "$repo_root" ls-files -- agent-notify cross-review | \
+  grep -v '^cross-review/merge_gate\.py$' | sort >"$target_manifest"
 
 if ! diff -u "$source_manifest" "$target_manifest"; then
   echo "copy manifest differs" >&2

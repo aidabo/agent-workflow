@@ -1,7 +1,7 @@
 .PHONY: test check migration-check behavior-lock merge-gate-help
 
 test:
-	for test in tests/test_*.py; do python3 "$$test" -v || exit 1; done
+	for test in tests/test_*.py; do python3 -m unittest "$$test" -v || exit 1; done
 	python3 -m unittest cross-review/test_status.py -v
 
 check: test

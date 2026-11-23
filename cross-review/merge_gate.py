@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-BLOCKED_PATH_PREFIXES = (".github/", "deploy/", "infra/", "migrations/", "terraform/")
+BLOCKED_PATH_PARTS = {".github", "deploy", "infra", "migrations", "terraform"}
 BLOCKED_PATH_NAMES = {
     ".env",
     ".env.local",
@@ -32,10 +32,15 @@ class GateResult:
 
 
 def _blocked_paths(paths: Iterable[str]) -> list[str]:
-    return sorted(
-        path for path in paths
-        if path in BLOCKED_PATH_NAMES or path.startswith(BLOCKED_PATH_PREFIXES)
-    )
+    blocked = []
+    for path in paths:
+        parts = Path(path).parts
+        name = parts[-1] if parts else path
+        if (BLOCKED_PATH_PARTS.intersection(parts)
+                or name in BLOCKED_PATH_NAMES
+                or name.startswith(".env")):
+            blocked.append(path)
+    return sorted(blocked)
 
 
 def evaluate(
@@ -53,6 +58,9 @@ def evaluate(
     files = sorted(set(changed_files))
     expected = set(expected_reviewers)
     actual = set(reviews)
+
+    if not expected:
+        reasons.append("no expected reviewers configured")
 
     if pr.get("state") != "OPEN":
         reasons.append(f"PR state is {pr.get('state', '?')}, not OPEN")

@@ -41,7 +41,7 @@ agent="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((x["nam
 [[ -n "$agent" ]] || { echo "missing author:<agent> label" >&2; exit 2; }
 reviewers="$(reviewers_for "$agent")"
 report_dir="$(report_dir_for "$src")"
-changed_files="$(gh api "repos/$gh_repo/pulls/$pr_number/files" --paginate --jq '.[].filename')"
+changed_files="$(gh api "repos/$gh_repo/pulls/$pr_number/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')"
 
 CR_NO_COLOR=1 PYTHONPATH="$here/cross-review" python3 "$here/cross-review/merge_gate.py" \
   --json "$json" \

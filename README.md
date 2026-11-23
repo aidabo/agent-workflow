@@ -64,7 +64,7 @@ bin/cross-review      # local cross-review
 最初はstatus metadataとmonitor表示だけを実装する。task自動割当、agent自動起動、自動mergeは
 後回しにする。人の判断境界を保ったまま、現在の「何をしているか分かりにくい」問題を解消する。
 
-auto-mergeはPhase 3でdry-runから段階導入する。`bin/agent-merge-gate`は判定だけを行い、
+auto-mergeはPhase 4でdry-runから段階導入する。`bin/agent-merge-gate`は判定だけを行い、
 GitHubへのmerge操作はしない。
 
 ## Phase 1 quick start

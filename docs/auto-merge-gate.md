@@ -1,8 +1,8 @@
-# Auto-merge gate（Phase 3 dry-run）
+# Auto-merge gate（Phase 4 dry-run）
 
 ## 目的
 
-Claude と DeepSeek の両方が、同じ最新 head に対して `APPROVE` したPRを機械的に判定する。
+configで指定された全レビュアーが、同じ最新 headに対して`APPROVE`したPRを機械的に判定する。
 この段階では `gh pr merge` を呼ばず、判定結果だけを出す。既存の「マージは人が行う」という境界を壊さず、深夜運用で誤判定がないかを観測するためである。
 
 ```mermaid
