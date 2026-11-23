@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Project-facing entry point for the standalone agent workflow.
+set -euo pipefail
+
+root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+usage() {
+  cat <<'EOF'
+usage: bin/agent-workflow <command> [args...]
+
+commands:
+  check       validate local tools and cross-review configuration
+  start       start configured tmux agents
+  monitor     open the agent monitor
+  status      read or update task status metadata
+  review      run or inspect cross-review
+  gate        dry-run one PR: --repo=<name> --pr=<number>
+  observe     dry-run all open PRs with automation:auto-merge
+EOF
+}
+
+check_config() {
+  local config="${CROSS_REVIEW_CONFIG:-$root/cross-review/config.local.sh}"
+  [[ -f "$config" ]] || {
+    echo "missing config: $config" >&2
+    echo "copy cross-review/config.local.example.sh to config.local.sh" >&2
+    return 2
+  }
+  command -v gh >/dev/null || { echo "missing command: gh" >&2; return 2; }
+  command -v python3 >/dev/null || { echo "missing command: python3" >&2; return 2; }
+  command -v flock >/dev/null || { echo "missing command: flock" >&2; return 2; }
+  CROSS_REVIEW_CONFIG="$config" source "$root/cross-review/config.sh"
+  (( ${#REPOS[@]} > 0 )) || { echo "REPOS is empty in $config" >&2; return 2; }
+  echo "OK: config=$config repos=${#REPOS[@]} gh=$(command -v gh) flock=$(command -v flock)"
+}
+
+command_name="${1:-help}"
+shift || true
+case "$command_name" in
+  help|-h|--help) usage ;;
+  check) check_config ;;
+  start) exec "$root/bin/agent-start" "$@" ;;
+  monitor) exec "$root/bin/agent-monitor" "$@" ;;
+  status) exec "$root/bin/agent-status" "$@" ;;
+  review) exec "$root/bin/cross-review" "$@" ;;
+  gate) exec "$root/bin/agent-merge-gate" "$@" ;;
+  observe) exec "$root/bin/agent-merge-observe" "$@" ;;
+  *) echo "unknown command: $command_name" >&2; usage >&2; exit 64 ;;
+esac
