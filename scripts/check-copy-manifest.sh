@@ -16,9 +16,8 @@ source_manifest="$(mktemp)"
 target_manifest="$(mktemp)"
 trap 'rm -f "$source_manifest" "$target_manifest"' EXIT
 
-# These files intentionally specialize the copied runtime for this standalone
-# repository (storage paths, cron markers, session names, or new gate code).
-# Keep the allowlist tracked and explicit so unrelated copy drift still fails.
+# Target-only files are explicitly allowlisted; copied runtime paths still have
+# to exist in both repositories. Keep the list tracked and minimal.
 standalone_paths="$(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$repo_root/scripts/standalone-runtime-paths.txt")"
 filter_standalone() {
   while IFS= read -r path; do

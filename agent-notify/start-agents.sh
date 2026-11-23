@@ -7,7 +7,7 @@ force_new=false
 # The hook-log monitor pane is opt-in (--monitor). By default every pane is a
 # plain agent pane, one per entry in agents.yaml.
 with_monitor=false
-# Session name: argument > AGENTS_SESSION > `session:` in agents.yaml > "<workspace folder>-agents"
+# Session name: argument > AGENTS_SESSION > `session:` in agents.yaml > "<workspace folder>-agent-workflow-agents"
 session="${AGENTS_SESSION:-}"
 
 for arg in "$@"; do
