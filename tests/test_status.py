@@ -10,10 +10,32 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from agent_workflow.context import resolve_context
+from agent_workflow.monitor_data import format_task_lines
 from agent_workflow.status import atomic_write, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
+    def test_checkpoint_and_resume_preserve_task_without_changing_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding", "--branch", "feature/x", "--pr", "12"]), 0)
+            self.assertEqual(main(["checkpoint", *args, "--next-action", "run tests"]), 0)
+            checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
+            self.assertTrue(checkpoint.exists())
+            data = json.loads(checkpoint.read_text())
+            self.assertEqual(data["next_action"], "run tests")
+            self.assertEqual(data["branch"], "feature/x")
+            self.assertEqual(data["pr"], 12)
+            self.assertEqual(main(["resume", "--workspace", tmp]), 0)
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual(task["phase"], "coding")
+            self.assertEqual(task["task_status"], "in_progress")
+
+    def test_checkpoint_rejects_unknown_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "checkpoint", "--workspace", tmp, "--agent", "codex", "--task-id", "missing",
+            ]), 2)
     def test_begin_and_heartbeat_write_separate_atomic_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

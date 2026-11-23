@@ -1,6 +1,6 @@
-# Phase 5: checkpoint / resume（設計・未実装）
+# Phase 5: checkpoint / resume
 
-> この文書は設計段階である。現時点の`bin/agent-workflow`には`checkpoint`、`resume`、`checkpoint prune` commandはまだ実装されていない。実装PRが入るまで、下のcommandを実行してはいけない。
+初期実装ではcheckpoint保存とresume候補表示を提供する。paneの自動再起動とcheckpoint履歴のpruneは将来拡張とする。
 
 ## 目的
 
@@ -58,7 +58,6 @@ directoryは`0700`、fileは`0600`を維持する。
 ## command設計
 
 ```bash
-# 実装後に有効
 bin/agent-workflow checkpoint \
   --workspace "$PWD" --agent codex --task-id runner-001 \
   --next-action "レビュー指摘を修正してtestする"
@@ -101,19 +100,16 @@ checkpoint 12KB · 4m ago
 
 checkpointの内容を毎回読み込まず、file sizeとmtimeだけを取得する。既定のwarning閾値は`512KB`とし、超過した場合は`checkpoint oversized`を表示する。checkpointには大きなログやdiffを保存せず、test logやPR URLなどの参照だけを保存する。
 
-初期実装ではtaskごとに最新checkpointを1件だけ保持する。履歴を保存する拡張を行う場合は、次の明示commandで削除する。
+初期実装ではtaskごとに最新checkpointを1件だけ保持する。checkpoint履歴の保存とprune commandは将来拡張であり、現時点では手動削除しない。
 
 ```bash
-# 実装後に有効。まず削除対象だけ表示する
+# 将来拡張の例（現時点では未実装）
 bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --keep 3 --dry-run
-
-# 内容を確認してから削除
-bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --keep 3
 ```
 
 自動削除は行わない。done taskのcheckpointも、最初は人が確認してから削除する。
 
-## 再起動後の運用（実装後）
+## 再起動後の運用
 
 ```bash
 cd "${WORKSPACE}/11-agent-workflow"

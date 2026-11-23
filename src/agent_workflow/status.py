@@ -170,6 +170,80 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
             lock_stream.close()
 
 
+def command_checkpoint(args: argparse.Namespace) -> int:
+    agent = safe_id(args.agent, "agent")
+    task_id = safe_id(args.task_id, "task_id")
+    for label, value in vars(args).items():
+        if isinstance(value, str):
+            reject_secret(value, label)
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_path = path_for(root, "tasks", task_id)
+    task = read_json(task_path)
+    if not task:
+        raise ValueError(f"task does not exist: {task_id}")
+    checkpoint = {
+        "schema_version": 1,
+        "task_id": task_id,
+        "agent": agent,
+        "workspace": str(workspace),
+        "checkpoint_at": now(),
+        "phase": task.get("phase"),
+        "task_status": task.get("task_status"),
+        "state": task.get("state"),
+        "goal": task.get("goal"),
+        "repo": task.get("repo"),
+        "repo_dir": task.get("repo_dir"),
+        "branch": task.get("branch"),
+        "head_sha": task.get("commit"),
+        "pr": task.get("pr"),
+        "test": task.get("test"),
+        "next_action": args.next_action or task.get("next_action") or task.get("goal"),
+        "resume_note": args.resume_note or task.get("resume_note"),
+        "references": task.get("references", []),
+    }
+    atomic_write(path_for(root, "checkpoints", task_id), checkpoint)
+    print(json.dumps(checkpoint, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_resume(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_paths = sorted((root / "tasks").glob("*.json"))
+    candidates = []
+    for task_path in task_paths:
+        task = read_json(task_path)
+        if not task or task.get("state") == "done":
+            continue
+        if args.task_id and task.get("task_id", task_path.stem) != args.task_id:
+            continue
+        task_id = task.get("task_id", task_path.stem)
+        checkpoint = read_json(path_for(root, "checkpoints", task_id))
+        warning = []
+        if task.get("state") in {"stale", "needs_human", "blocked"}:
+            warning.append(f"task state is {task.get('state')}; human confirmation required")
+        if task.get("pr") and not checkpoint:
+            warning.append("no checkpoint for current task")
+        candidates.append({
+            "task_id": task_id,
+            "agent": task.get("agent"),
+            "phase": task.get("phase"),
+            "task_status": task.get("task_status"),
+            "state": task.get("state"),
+            "branch": checkpoint.get("branch", task.get("branch")),
+            "pr": checkpoint.get("pr", task.get("pr")),
+            "head_sha": checkpoint.get("head_sha", task.get("commit")),
+            "test": checkpoint.get("test", task.get("test")),
+            "next_action": checkpoint.get("next_action", task.get("goal")),
+            "checkpoint_at": checkpoint.get("checkpoint_at"),
+            "warning": warning,
+            "prompt": "同じbranchの未完了作業から続けてください。新しいPRや重複pushは作らないでください。",
+        })
+    print(json.dumps({"workspace": str(workspace), "resume_candidates": candidates}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -189,6 +263,8 @@ def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--event")
     parser.add_argument("--blocked-reason")
     parser.add_argument("--clear-blocked", action="store_true")
+    parser.add_argument("--next-action")
+    parser.add_argument("--resume-note")
 
 
 def command_status(args: argparse.Namespace) -> int:
@@ -303,12 +379,22 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--context-file", required=True)
     context.add_argument("--project")
     context.add_argument("--task-file")
+    checkpoint = sub.add_parser("checkpoint")
+    common_parser(checkpoint)
+    resume = sub.add_parser("resume")
+    resume.add_argument("--workspace", default=".")
+    resume.add_argument("--state-root")
+    resume.add_argument("--task-id")
     try:
         args = parser.parse_args(argv)
         if args.command == "context":
             return command_context(args)
         if args.command == "sweep":
             return command_sweep(args)
+        if args.command == "checkpoint":
+            return command_checkpoint(args)
+        if args.command == "resume":
+            return command_resume(args)
         return command_status(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"agent-status: {exc}", file=os.sys.stderr)

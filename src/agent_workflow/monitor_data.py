@@ -42,10 +42,22 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
         test = record.get("test") or {}
         test_status = (test.get("status") or "-") if isinstance(test, dict) else "-"
         pr = f"#{record['pr']}" if record.get("pr") else "-"
+        checkpoint = (root or state_root()) / "checkpoints" / f"{record.get('task_id', '?')}.json"
+        checkpoint_info = ""
+        try:
+            stat = checkpoint.stat()
+            size = stat.st_size
+            shown = f"{size / 1024:.0f}KB" if size >= 1024 else f"{size}B"
+            checkpoint_info = f" cp={shown}"
+            if size > 512 * 1024:
+                checkpoint_info += "!"
+        except OSError:
+            pass
         line = (
             f"  {record.get('agent', '?')} [{record.get('phase', '?')}] "
             f"{record.get('task_id', '?')} {record.get('state', '?')} "
             f"test={test_status} PR={pr} hb={record.get('heartbeat_at', '-')}"
+            f"{checkpoint_info}"
         )
         if record.get("error"):
             line += " ERROR"
