@@ -170,14 +170,27 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
             lock_stream.close()
 
 
-def write_checkpoint(path: Path, checkpoint: dict[str, Any]) -> None:
+def save_checkpoint(path: Path, task: dict[str, Any], *, task_id: str, agent: str,
+                    workspace: Path, next_action: str | None = None,
+                    resume_note: str | None = None, allow_done: bool = False) -> dict[str, Any]:
     lock_path = path.with_suffix(path.suffix + ".lock")
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(lock_path, "a+", encoding="utf-8") as lock_stream:
         os.chmod(lock_path, 0o600)
         fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        try:
+            previous = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            print(f"agent-status: checkpoint warning: {exc}", file=os.sys.stderr)
+            previous = {}
+        checkpoint = build_checkpoint(
+            task, task_id=task_id, agent=agent, workspace=workspace,
+            next_action=next_action, resume_note=resume_note,
+            previous=previous, allow_done=allow_done,
+        )
         atomic_write(path, checkpoint)
         fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+        return checkpoint
 
 
 def build_checkpoint(task: dict[str, Any], *, task_id: str, agent: str, workspace: Path,
@@ -232,10 +245,10 @@ def command_checkpoint(args: argparse.Namespace) -> int:
     task = read_json(task_path)
     if not task:
         raise ValueError(f"task does not exist: {task_id}")
-    checkpoint = build_checkpoint(task, task_id=task_id, agent=agent, workspace=workspace,
-                                  next_action=args.next_action, resume_note=args.resume_note,
-                                  previous=read_json(path_for(root, "checkpoints", task_id)))
-    write_checkpoint(path_for(root, "checkpoints", task_id), checkpoint)
+    checkpoint = save_checkpoint(
+        path_for(root, "checkpoints", task_id), task, task_id=task_id, agent=agent,
+        workspace=workspace, next_action=args.next_action, resume_note=args.resume_note,
+    )
     print(json.dumps(checkpoint, ensure_ascii=False, indent=2))
     return 0
 
@@ -413,13 +426,12 @@ def command_status(args: argparse.Namespace) -> int:
     if checkpoint_event:
         checkpoint_path = path_for(root, "checkpoints", task_id)
         try:
-            previous_checkpoint = read_json(checkpoint_path)
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            save_checkpoint(
+                checkpoint_path, task, task_id=task_id, agent=agent, workspace=workspace,
+                allow_done=args.command == "end",
+            )
+        except ValueError as exc:
             print(f"agent-status: checkpoint warning: {exc}", file=os.sys.stderr)
-            previous_checkpoint = {}
-        checkpoint = build_checkpoint(task, task_id=task_id, agent=agent, workspace=workspace,
-                                      previous=previous_checkpoint, allow_done=args.command == "end")
-        write_checkpoint(checkpoint_path, checkpoint)
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
     return 0
 

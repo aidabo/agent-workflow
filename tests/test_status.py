@@ -37,11 +37,11 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["begin", *args, "--phase", "coding", "--goal", "goal"]), 0)
             checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
             self.assertTrue(checkpoint.exists())
-            first_mtime = checkpoint.stat().st_mtime_ns
+            first_inode = checkpoint.stat().st_ino
             self.assertEqual(main(["heartbeat", *args]), 0)
-            self.assertEqual(checkpoint.stat().st_mtime_ns, first_mtime)
+            self.assertEqual(checkpoint.stat().st_ino, first_inode)
             self.assertEqual(main(["test", *args, "--test-status", "passed", "--test-summary", "unit"]), 0)
-            self.assertGreater(checkpoint.stat().st_mtime_ns, first_mtime)
+            self.assertNotEqual(checkpoint.stat().st_ino, first_inode)
 
     def test_automatic_checkpoint_keeps_manual_next_action_and_recovers_corrupt_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -69,6 +69,15 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main([
                 "checkpoint", "--workspace", tmp, "--agent", "codex", "--task-id", "missing",
             ]), 2)
+
+    def test_manual_checkpoint_recovers_corrupt_previous_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding", "--goal", "goal"]), 0)
+            checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
+            checkpoint.write_text("not json")
+            self.assertEqual(main(["checkpoint", *args, "--next-action", "recover"]), 0)
+            self.assertEqual(json.loads(checkpoint.read_text())["next_action"], "recover")
     def test_begin_and_heartbeat_write_separate_atomic_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
