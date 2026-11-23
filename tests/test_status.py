@@ -34,14 +34,35 @@ class StatusTests(unittest.TestCase):
     def test_begin_and_test_events_create_checkpoint_but_heartbeat_does_not_change_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
-            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            self.assertEqual(main(["begin", *args, "--phase", "coding", "--goal", "goal"]), 0)
             checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
             self.assertTrue(checkpoint.exists())
-            first = checkpoint.read_text()
+            first_mtime = checkpoint.stat().st_mtime_ns
             self.assertEqual(main(["heartbeat", *args]), 0)
-            self.assertEqual(checkpoint.read_text(), first)
+            self.assertEqual(checkpoint.stat().st_mtime_ns, first_mtime)
             self.assertEqual(main(["test", *args, "--test-status", "passed", "--test-summary", "unit"]), 0)
-            self.assertNotEqual(checkpoint.read_text(), first)
+            self.assertGreater(checkpoint.stat().st_mtime_ns, first_mtime)
+
+    def test_automatic_checkpoint_keeps_manual_next_action_and_recovers_corrupt_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding", "--goal", "goal"]), 0)
+            self.assertEqual(main(["checkpoint", *args, "--next-action", "manual next"]), 0)
+            checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
+            self.assertEqual(main(["update", *args, "--branch", "feature/x"]), 0)
+            self.assertEqual(json.loads(checkpoint.read_text())["next_action"], "manual next")
+            checkpoint.write_text("not json")
+            self.assertEqual(main(["update", *args, "--pr", "1"]), 0)
+            data = json.loads(checkpoint.read_text())
+            self.assertEqual(data["next_action"], "goal")
+
+    def test_end_writes_final_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            self.assertEqual(main(["end", *args]), 0)
+            data = json.loads((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").read_text())
+            self.assertEqual(data["task_status"], "done")
 
     def test_checkpoint_rejects_unknown_task(self):
         with tempfile.TemporaryDirectory() as tmp:
