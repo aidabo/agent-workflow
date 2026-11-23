@@ -11,7 +11,7 @@
 | watch/live log | `~/.cache/cross-review/` | `~/.cache/agent-workflow/cross-review/` |
 | inbox | `10-agent-tools/cross-review/inbox/` | `11-agent-workflow/cross-review/inbox/` |
 | review worktree | `<project>-review` | `<project>-agent-workflow-review` |
-| agent tmux session | 旧設定 | `<project>-agent-workflow-agents` |
+| agent tmux session | 旧設定 | `<workspace folder>-agent-workflow-agents` |
 | monitor tmux session | `agents-monitor` | `agent-workflow-monitor` |
 
 GitHubのPR・コメント・label・branchは共有される。ローカルreport/state/inbox/worktree/cronだけを分ける。
@@ -19,11 +19,11 @@ GitHubのPR・コメント・label・branchは共有される。ローカルrepo
 ## 切り替え手順
 
 1. 10-agent-toolsの作業を止めずに、11-agent-workflowの`config.local.sh`を作る。
-2. `REPOS`の4列目を`<project>-agent-workflow-review`にする。
+2. canary用`REPOS` entryの4列目を`<project>-agent-workflow-review`にする。
 3. まず旧10側の`REPOS`にないcanary repositoryを1件だけ11側へ登録する。
-4. canaryだけでreport、state、inbox、tmux session、cronが専用領域になることを確認する。
+4. `11-agent-workflow/cross-review/install.sh`を実行し、canaryだけでreport、state、inbox、tmux session、cronが専用領域になることを確認する。
 5. 全repositoryを切り替える前に、10-agent-toolsのcronを停止する。同じPRを10/11で並行reviewすると、コメントと通知が二重になる。
-6. 11-agent-workflowの`agent`/`monitor`を新しいtmux sessionで起動し、11側のcronを有効にする。
+6. 11側の`REPOS`を全repositoryへ広げ、11-agent-workflowの`agent`/`monitor`を新しいtmux sessionで起動する。
 7. 旧runtimeはrollback用にread-only保持する。
 
 ## 切り戻し
@@ -41,4 +41,4 @@ GitHubのPR・コメント・label・branchは共有される。ローカルrepo
 - 10側と11側を同じprojectの同じreview worktreeで同時に動かさない。
 - 移行確認中に同じPRを二重reviewしない。canary repositoryを使うか、対象PRに`no-cross-review`を付ける。
 - 旧stateを新stateへコピーしない。GitHubのPR headと新inboxを確認して再開する。
-- 11側のinstall/uninstallはmarker`# agent-workflow-cross-review-watch`だけを対象にし、10側のcron行を削除しない。
+- 11側のinstall/uninstallはmarker`# agent-workflow-cross-review-watch`と、このcloneの旧watch.sh行だけを対象にし、10側のcron行を削除しない。

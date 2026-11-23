@@ -6,7 +6,7 @@
 #   install.sh --uninstall  cron の巡回を外す（レビュー結果・設定は残す）
 #
 # パスの設定は要らない: この install.sh の場所から watch.sh の場所を決める（どこに clone してもよい）。
-# このruntimeが管理するmarker付きの行だけを更新する。10-agent-toolsなど別runtimeのcron行は触らない。
+# このruntimeのmarker付き行と、このcloneの旧watch.sh行だけを更新する。10-agent-toolsなど別runtimeのcron行は触らない。
 # 変える前のcrontabは ~/.cache/agent-workflow/cross-review/crontab.bak.<日時> に残す。
 set -uo pipefail
 here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"

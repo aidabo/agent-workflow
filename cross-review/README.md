@@ -154,7 +154,7 @@ DeepSeek の Claude Code も `Co-Authored-By: Claude` を付けるので、deeps
 ```
 
 - パスの設定は要らない。install.sh の場所から watch.sh の場所を決めるので、どこに clone してもよい。
-  11-agent-workflow自身のmarker付きcron行だけを更新する。10-agent-toolsのcron行は変更しない。変える前のcrontabは
+  11-agent-workflow自身のmarker付きcron行と、このcloneの旧watch.sh行だけを更新する。10-agent-toolsのcron行は変更しない。変える前のcrontabは
   `~/.cache/agent-workflow/cross-review/crontab.bak.<日時>` に残る。何度実行してもよい。
 - 確認すること: cron が動いているか（WSL は `/etc/wsl.conf` の `[boot] systemd=true`）、`config.local.sh`
   （無ければひな形を作る）と `REPOS` の作業ツリー、`git gh python3 flock tmux timeout`、`gh` のログイン、
