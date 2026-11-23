@@ -192,3 +192,4 @@ bin/agent-workflow cron uninstall
 - [docs/monitor.md](docs/monitor.md)：monitor設計
 - [docs/auto-merge-gate.md](docs/auto-merge-gate.md)：auto-merge dry-run
 - [docs/storage-separation.md](docs/storage-separation.md)：旧runtimeとの分離・rollback
+- [docs/phase5-resume.md](docs/phase5-resume.md)：再起動後のcheckpoint/resume設計

@@ -2,6 +2,31 @@
 
 ## 全体構成
 
+### 運用全体
+
+```mermaid
+flowchart LR
+  H[人: 要件・完了条件] --> P[plan / docs]
+  P --> T[task JSON]
+  T --> A[Claude / Codex / DeepSeek pane]
+  A --> S[status / heartbeat / test]
+  S --> C[checkpoint]
+  A --> G[Git branch / PR]
+  G --> R[cross-review]
+  R -->|APPROVE| M[人がmerge]
+  R -->|CHANGES_REQUESTED| A
+  R -->|NEEDS YOU / max rounds| H
+  C --> X[tmux・マシン再起動]
+  X --> U[resume候補・prompt]
+  U --> H
+  S --> MON[monitor]
+  R --> MON
+  C --> MON
+  MON --> H
+```
+
+taskの状態、reviewの状態、checkpointは別の情報として保存する。monitorはそれらを一つの画面へ集約するが、agent paneへ自動入力はしない。
+
 ### 移行中
 
 ```mermaid
@@ -106,6 +131,52 @@ sequenceDiagram
   M-->>A: monitor displays context
   A->>G: docs/code PR
 ```
+
+### 再起動後のデータフロー
+
+```mermaid
+sequenceDiagram
+  participant T as task JSON
+  participant C as checkpoint JSON
+  participant R as resume
+  participant H as 人
+  participant A as agent pane
+
+  A->>T: heartbeat / phase / test
+  A->>C: 重要イベントでcheckpoint
+  Note over C: size・mtimeをmonitorに表示
+  A--xA: tmux/マシン停止
+  H->>R: resume
+  R->>T: 未完了・stale taskを読む
+  R->>C: 最新checkpointを読む
+  R-->>H: branch / PR / test / warning / prompt
+  H->>A: 同じbranchで再開を指示
+```
+
+checkpointはheartbeatごとには保存しない。phase変更、test結果、PR操作、next action変更、明示checkpoint、graceful stopを保存契機とする。
+
+### 保存領域の境界
+
+```mermaid
+flowchart TB
+  subgraph OLD[10-agent-tools]
+    OREPORT[.agent-tools/reviews]
+    OSTATE[~/.cache/cross-review]
+    OWT[project-review]
+    OTMUX[旧tmux session]
+  end
+  subgraph NEW[11-agent-workflow]
+    NREPORT[.agent-workflow/reviews]
+    NSTATE[~/.cache/agent-workflow/cross-review]
+    NCP[.agent-workflow/state/checkpoints]
+    NWT[project-agent-workflow-review]
+    NTMUX[agent-workflow sessions]
+  end
+  OLD -. rollback only .- OLD
+  NEW -. active runtime .- NEW
+```
+
+GitHubのPR、branch、コメント、labelsは共有される。ローカル状態、review worktree、cron、tmux sessionは共有しない。
 
 ## 安全境界
 
