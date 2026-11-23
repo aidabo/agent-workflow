@@ -104,10 +104,39 @@ export AUTO_MERGE_OBSERVE_LOG="$HOME/.cache/agent-workflow/observe.jsonl"
 export AUTO_MERGE_OBSERVE_LOCK="$HOME/.cache/agent-workflow/observe.lock"
 ```
 
-## cron
+## cronの役割と初回設定
+
+cronは2種類ある。
+
+| 種類 | command | 目的 | 必須条件 |
+|---|---|---|---|
+| cross-review watch | `cross-review/watch.sh` | 未レビューPRを探し、reviewerを起動する | 深夜もPRレビューを自動継続する場合は必要 |
+| merge observer | `agent-workflow observe` | opt-in PRのdry-run判定を記録する | 夜間の判定ログを取る場合だけ必要 |
+
+`agent`、`monitor`、手動の`review`/`gate`だけを使う場合、最初からcronを設定する必要はない。
+
+まず設定を確認する。
+
+```bash
+"$WORKFLOW_HOME/cross-review/install.sh" --check
+```
+
+cross-reviewの自動レビューを有効にする場合は、configを編集してから次を一度実行する。
+
+```bash
+"$WORKFLOW_HOME/cross-review/install.sh"
+```
+
+このコマンドはcross-reviewのwatchを毎分登録し、既存crontabのバックアップを`$HOME/.cache/cross-review/`へ保存する。解除は次で行う。
+
+```bash
+"$WORKFLOW_HOME/cross-review/install.sh" --uninstall
+```
+
+merge observerは別に登録する。
 
 ```cron
 */5 * * * * /path/to/11-agent-workflow/bin/agent-workflow observe >> $HOME/.cache/agent-workflow/observe.cron.log 2>&1
 ```
 
-cron環境では`gh`、`python3`、`flock`がPATHにあることを確認する。observerは重複起動をlockで防ぎ、一覧取得・gate異常時は非0終了する。
+cron環境では`gh`、`python3`、`flock`、reviewer commandがPATHにあることを確認する。observerは重複起動をlockで防ぎ、一覧取得・gate異常時は非0終了する。どちらのcronもmerge操作は実行しない。
