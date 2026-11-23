@@ -78,6 +78,35 @@ class StatusTests(unittest.TestCase):
             checkpoint.write_text("not json")
             self.assertEqual(main(["checkpoint", *args, "--next-action", "recover"]), 0)
             self.assertEqual(json.loads(checkpoint.read_text())["next_action"], "recover")
+
+    def test_checkpoint_prune_is_dry_run_and_skips_active_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            result = main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s"])
+            self.assertEqual(result, 0)
+            self.assertTrue((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").exists())
+            output_path = Path(tmp) / ".agent-workflow/state/tasks/task-1.json"
+            record = json.loads(output_path.read_text())
+            record["state"] = "done"
+            record["phase"] = "done"
+            record["task_status"] = "done"
+            output_path.write_text(json.dumps(record))
+            import os
+            os.utime(Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json", (1, 1))
+            self.assertEqual(main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s", "--apply"]), 0)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").exists())
+
+    def test_checkpoint_prune_skips_unknown_task_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / ".agent-workflow/state"
+            (root / "checkpoints").mkdir(parents=True)
+            (root / "tasks").mkdir()
+            (root / "tasks/task-1.json").write_text("[]")
+            (root / "checkpoints/task-1.json").write_text("checkpoint")
+            self.assertEqual(main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s", "--apply"]), 0)
+            self.assertTrue((root / "checkpoints/task-1.json").exists())
+
     def test_begin_and_heartbeat_write_separate_atomic_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

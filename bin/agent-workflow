@@ -16,6 +16,7 @@ commands:
   monitor     open the agent monitor
   status      read or update task status metadata
   checkpoint  save a durable checkpoint for a task
+  checkpoint prune  list/delete old completed-task checkpoints (--older-than 30d [--apply])
   resume      list unfinished tasks and resume prompts
   review      review one PR: <repo-name> <pr-number>
   gate        dry-run one PR: --repo=<name> --pr=<number>
@@ -63,7 +64,13 @@ case "$command_name" in
   start) exec "$root/bin/agent-start" "$@" ;;
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
-  checkpoint) exec "$root/bin/agent-status" checkpoint "$@" ;;
+  checkpoint)
+    if [[ "${1:-}" == "prune" ]]; then
+      shift
+      exec "$root/bin/agent-status" checkpoint-prune "$@"
+    fi
+    exec "$root/bin/agent-status" checkpoint "$@"
+    ;;
   resume) exec "$root/bin/agent-status" resume "$@" ;;
   review) exec "$root/bin/cross-review" "$@" ;;
   gate) check_config gate; exec "$root/bin/agent-merge-gate" "$@" ;;
