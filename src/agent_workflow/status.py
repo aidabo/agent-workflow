@@ -170,21 +170,35 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
             lock_stream.close()
 
 
-def command_checkpoint(args: argparse.Namespace) -> int:
-    agent = safe_id(args.agent, "agent")
-    task_id = safe_id(args.task_id, "task_id")
-    for label, value in vars(args).items():
-        if isinstance(value, str):
-            reject_secret(value, label)
-    workspace = Path(args.workspace).expanduser().resolve()
-    root = state_root(workspace, args.state_root)
-    task_path = path_for(root, "tasks", task_id)
-    task = read_json(task_path)
-    if not task:
-        raise ValueError(f"task does not exist: {task_id}")
+def save_checkpoint(path: Path, task: dict[str, Any], *, task_id: str, agent: str,
+                    workspace: Path, next_action: str | None = None,
+                    resume_note: str | None = None, allow_done: bool = False) -> dict[str, Any]:
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+", encoding="utf-8") as lock_stream:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        try:
+            previous = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            print(f"agent-status: checkpoint warning: {exc}", file=os.sys.stderr)
+            previous = {}
+        checkpoint = build_checkpoint(
+            task, task_id=task_id, agent=agent, workspace=workspace,
+            next_action=next_action, resume_note=resume_note,
+            previous=previous, allow_done=allow_done,
+        )
+        atomic_write(path, checkpoint)
+        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+        return checkpoint
+
+
+def build_checkpoint(task: dict[str, Any], *, task_id: str, agent: str, workspace: Path,
+                     next_action: str | None = None, resume_note: str | None = None,
+                     previous: dict[str, Any] | None = None, allow_done: bool = False) -> dict[str, Any]:
     if task.get("agent") != agent:
         raise ValueError(f"task belongs to agent {task.get('agent', '?')}, not {agent}")
-    if task.get("task_status") == "done" or task.get("state") == "done":
+    if not allow_done and (task.get("task_status") == "done" or task.get("state") == "done"):
         raise ValueError("cannot checkpoint a completed task")
     references = task.get("references", [])
     if not isinstance(references, list):
@@ -196,7 +210,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         ref_path = Path(reference)
         if ref_path.is_absolute() or ".." in ref_path.parts:
             raise ValueError("references must be workspace-relative paths")
-    checkpoint = {
+    previous = previous if isinstance(previous, dict) else {}
+    return {
         "schema_version": 1,
         "task_id": task_id,
         "agent": agent,
@@ -212,11 +227,28 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         "head_sha": task.get("commit"),
         "pr": task.get("pr"),
         "test": task.get("test"),
-        "next_action": args.next_action or task.get("next_action") or task.get("goal"),
-        "resume_note": args.resume_note or task.get("resume_note"),
+        "next_action": next_action or task.get("next_action") or previous.get("next_action") or task.get("goal"),
+        "resume_note": resume_note or task.get("resume_note") or previous.get("resume_note"),
         "references": references,
     }
-    atomic_write(path_for(root, "checkpoints", task_id), checkpoint)
+
+
+def command_checkpoint(args: argparse.Namespace) -> int:
+    agent = safe_id(args.agent, "agent")
+    task_id = safe_id(args.task_id, "task_id")
+    for label, value in vars(args).items():
+        if isinstance(value, str):
+            reject_secret(value, label)
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_path = path_for(root, "tasks", task_id)
+    task = read_json(task_path)
+    if not task:
+        raise ValueError(f"task does not exist: {task_id}")
+    checkpoint = save_checkpoint(
+        path_for(root, "checkpoints", task_id), task, task_id=task_id, agent=agent,
+        workspace=workspace, next_action=args.next_action, resume_note=args.resume_note,
+    )
     print(json.dumps(checkpoint, ensure_ascii=False, indent=2))
     return 0
 
@@ -246,6 +278,9 @@ def command_resume(args: argparse.Namespace) -> int:
             continue
         try:
             checkpoint = read_json(path_for(root, "checkpoints", task_id))
+            if not isinstance(checkpoint, dict):
+                checkpoint = {}
+                errors.append({"task_id": task_id, "warning": "checkpoint file is not an object"})
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             checkpoint = {}
             errors.append({"task_id": task_id, "warning": f"invalid checkpoint: {exc}"})
@@ -381,6 +416,22 @@ def command_status(args: argparse.Namespace) -> int:
                       | ({"blocked_reason"} if args.clear_blocked else set())),
         lock=True,
     )
+    checkpoint_event = args.command in {"begin", "test", "end"} or any(
+        value is not None for value in (
+            args.repo, args.repo_dir, args.phase, args.state, args.task_status, args.goal,
+            args.branch, args.commit, args.pr, args.test_status, args.test_summary,
+            args.event, args.blocked_reason,
+        )
+    )
+    if checkpoint_event:
+        checkpoint_path = path_for(root, "checkpoints", task_id)
+        try:
+            save_checkpoint(
+                checkpoint_path, task, task_id=task_id, agent=agent, workspace=workspace,
+                allow_done=args.command == "end",
+            )
+        except ValueError as exc:
+            print(f"agent-status: checkpoint warning: {exc}", file=os.sys.stderr)
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
     return 0
 
