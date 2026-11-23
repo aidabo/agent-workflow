@@ -77,6 +77,7 @@ bin/agent-workflow monitor
 | `agent` | 設定を確認してtmuxのagent paneを起動 |
 | `monitor` | agent、task、PR、review状態を表示 |
 | `checkpoint` | taskの再開情報を保存 |
+| `checkpoint prune` | 古い完了taskのcheckpointをdry-run確認・整理 |
 | `resume` | 未完了taskとresume promptを表示 |
 
 application repositoryのpackage.jsonから呼ぶ場合は、次のようにします。

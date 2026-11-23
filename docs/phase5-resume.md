@@ -1,6 +1,6 @@
 # Phase 5: checkpoint / resume
 
-初期実装ではcheckpoint保存とresume候補表示を提供する。paneの自動再起動とcheckpoint履歴のpruneは将来拡張とする。
+初期実装ではcheckpoint保存、resume候補表示、完了taskのcheckpoint pruneを提供する。paneの自動再起動とcheckpoint履歴の自動pruneは将来拡張とする。
 
 ## 目的
 
@@ -110,7 +110,7 @@ checkpoint 12KB · 4m ago
 
 checkpointの内容を毎回読み込まず、file sizeとmtimeだけを取得する。既定のwarning閾値は`512KB`とし、超過した場合は`checkpoint oversized`を表示する。checkpointには大きなログやdiffを保存せず、test logやPR URLなどの参照だけを保存する。
 
-初期実装ではtaskごとに最新checkpointを1件だけ保持する。古いcheckpointは、未完了taskを除外したdry-run結果を確認してから明示的に削除する。
+初期実装ではtaskごとに最新checkpointを1件だけ保持する。古いcheckpointは、taskが`done`であることを確認し、未完了・不明・壊れたtaskを除外したdry-run結果を確認してから明示的に削除する。判定基準はcheckpoint fileのmtimeである。
 
 ```bash
 # まず削除候補だけ表示

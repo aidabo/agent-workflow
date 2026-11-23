@@ -6,7 +6,6 @@ import json
 import os
 import re
 import tempfile
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -331,17 +330,32 @@ def command_checkpoint_prune(args: argparse.Namespace) -> int:
     cutoff = datetime.now(timezone.utc).timestamp() - seconds
     candidates = []
     for path in sorted((root / "checkpoints").glob("*.json")):
-        if path.stat().st_mtime >= cutoff:
+        try:
+            if path.stat().st_mtime >= cutoff:
+                continue
+            task = read_json(root / "tasks" / path.name)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
             continue
-        task = read_json(root / "tasks" / path.name)
-        if isinstance(task, dict) and task.get("state") != "done":
+        if not isinstance(task, dict) or task.get("state") != "done":
             continue
         candidates.append(str(path))
     if args.apply:
         for name in candidates:
-            Path(name).unlink(missing_ok=True)
+            path = Path(name)
+            lock_path = path.with_suffix(path.suffix + ".lock")
+            with open(lock_path, "a+", encoding="utf-8") as lock_stream:
+                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+                try:
+                    task = read_json(root / "tasks" / path.name)
+                    if (isinstance(task, dict) and task.get("state") == "done"
+                            and path.exists() and path.stat().st_mtime < cutoff):
+                        path.unlink()
+                finally:
+                    fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
     print(json.dumps({"dry_run": not args.apply, "removed": candidates if args.apply else [],
-                      "candidates": candidates}, ensure_ascii=False, indent=2))
+                      "candidates": candidates, "count": len(candidates),
+                      "bytes": sum(Path(name).stat().st_size for name in candidates if Path(name).exists())},
+                     ensure_ascii=False, indent=2))
     return 0
 
 
