@@ -14,26 +14,29 @@ source "$here/cross-review/config.sh"
 
 log_file="${AUTO_MERGE_OBSERVE_LOG:-$HOME/.cache/agent-workflow/auto-merge-observe.jsonl}"
 log_dir="$(dirname "$log_file")"
-mkdir -p "$log_dir"
-chmod 700 "$log_dir"
+if [[ ! -d "$log_dir" ]]; then
+  mkdir -p -m 700 "$log_dir"
+fi
 touch "$log_file"
 chmod 600 "$log_file"
+failures=0
 
 append_record() {
-  local repo_name="$1" gh_repo="$2" pr_number="$3" exit_code="$4" output="$5"
-  OBSERVED_OUTPUT="$output" python3 - "$log_file" "$repo_name" "$gh_repo" "$pr_number" "$exit_code" <<'PY'
+  local repo_name="$1" gh_repo="$2" pr_number="$3" exit_code="$4" kind="$5" output="$6"
+  OBSERVED_OUTPUT="$output" python3 - "$log_file" "$repo_name" "$gh_repo" "$pr_number" "$exit_code" "$kind" <<'PY'
 import json
 import os
 import sys
 from datetime import datetime, timezone
 
-log_file, repo_name, gh_repo, pr_number, exit_code = sys.argv[1:]
+log_file, repo_name, gh_repo, pr_number, exit_code, kind = sys.argv[1:]
 record = {
     "observed_at": datetime.now(timezone.utc).isoformat(),
     "repo": repo_name,
     "github_repo": gh_repo,
     "pr": int(pr_number),
     "exit_code": int(exit_code),
+    "kind": kind,
     "output": os.environ.get("OBSERVED_OUTPUT", "").rstrip(),
 }
 with open(log_file, "a", encoding="utf-8") as stream:
@@ -43,22 +46,33 @@ PY
 
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r repo_name gh_repo _src _worktree <<<"$entry"
+  list_error_file="$(mktemp)"
   set +e
-  pr_numbers="$(gh pr list -R "$gh_repo" --state open --limit 100 \
-    --json number,labels \
-    --jq '.[] | select(any(.labels[]?; .name == "automation:auto-merge")) | .number' 2>&1)"
+  pr_numbers="$(gh pr list -R "$gh_repo" --state open --label automation:auto-merge --limit 1000 \
+    --json number --jq '.[].number' 2>"$list_error_file")"
   list_exit=$?
   set -e
+  list_error="$(<"$list_error_file")"
+  rm -f "$list_error_file"
   if [[ $list_exit -ne 0 ]]; then
-    append_record "$repo_name" "$gh_repo" "0" "$list_exit" "$pr_numbers"
+    append_record "$repo_name" "$gh_repo" "0" "$list_exit" "list_error" "$list_error"
+    failures=$((failures + 1))
     continue
   fi
   while IFS= read -r pr_number; do
     [[ -n "$pr_number" ]] || continue
+    [[ "$pr_number" =~ ^[0-9]+$ ]] || continue
     set +e
     output="$("$here/bin/agent-merge-gate" --repo="$repo_name" --pr="$pr_number" 2>&1)"
     gate_exit=$?
     set -e
-    append_record "$repo_name" "$gh_repo" "$pr_number" "$gate_exit" "$output"
+    append_record "$repo_name" "$gh_repo" "$pr_number" "$gate_exit" "gate" "$output"
+    if [[ $gate_exit -ne 0 && $gate_exit -ne 2 ]]; then
+      failures=$((failures + 1))
+    fi
   done <<<"$pr_numbers"
 done
+
+if (( failures > 0 )); then
+  exit 1
+fi

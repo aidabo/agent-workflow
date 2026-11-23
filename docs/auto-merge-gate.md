@@ -60,22 +60,22 @@ GitHubのrequired reviews・status checks・conversation resolutionはprotected 
 
 cross-reviewの`APPROVE`は現在、GitHubの正式review approvalではなくローカルreportとPRコメントである。また、agent-workflowの初期設計では人のmerge判断を残している。
 
-対象PRに\`automation:auto-merge\`ラベルを付けた状態で、次を実行する。
+対象PRに`automation:auto-merge`ラベルを付けた状態で、次を実行する。
 
-\`\`\`bash
+```bash
 bin/agent-merge-observe
 tail -n 1 ~/.cache/agent-workflow/auto-merge-observe.jsonl
-\`\`\`
+```
 
-\`agent-merge-observe\`はラベル付きのopen PRだけを取得し、\`bin/agent-merge-gate\`の結果をJSONLへ追記する。ログには時刻、repository、PR、exit code、判定理由が入り、\`gh pr merge\`は呼ばない。ログディレクトリは\`0700\`、ログは\`0600\`で作成する。
+`agent-merge-observe`はサーバー側で`automation:auto-merge`ラベルを付けたopen PRだけを取得し、`bin/agent-merge-gate`の結果をJSONLへ追記する。ログには時刻、repository、PR、exit code、判定種別、判定理由が入り、`gh pr merge`は呼ばない。ログディレクトリは新規作成時だけ`0700`、ログは`0600`で作成する。既存の共有ディレクトリの権限は変更しない。
 
 cronの例（5分間隔）は次のとおりである。
 
-\`\`\`cron
-*/5 * * * * /home/aidabo/work/legacy/11-agent-workflow/bin/agent-merge-observe >> /home/aidabo/.cache/agent-workflow/auto-merge-observe.cron.log 2>&1
-\`\`\`
+```cron
+*/5 * * * * /path/to/11-agent-workflow/bin/agent-merge-observe >> $HOME/.cache/agent-workflow/auto-merge-observe.cron.log 2>&1
+```
 
-1週間観測し、\`ELIGIBLE\`の誤判定がないこと、\`BLOCKED\`の理由が想定内であること、GitHub API障害時にmerge操作が起きないことを確認する。
+1週間観測し、`ELIGIBLE`の誤判定がないこと、`BLOCKED`の理由が想定内であること、GitHub API障害時にmerge操作が起きないことを確認する。cronでは`gh`と`python3`がPATHにあることを確認し、JSONLログは週次で退避またはrotateする。API一覧取得の失敗は`kind: list_error`として記録され、observerも非0で終了する。
 
 ## merge executor導入時
 
