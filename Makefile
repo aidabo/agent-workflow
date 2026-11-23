@@ -1,4 +1,4 @@
-.PHONY: test check migration-check behavior-lock merge-gate-help
+.PHONY: test check migration-check behavior-lock merge-gate-help merge-observe-help
 
 test:
 	for test in tests/test_*.py; do python3 -m unittest "$$test" -v || exit 1; done
@@ -15,3 +15,6 @@ behavior-lock:
 
 merge-gate-help:
 	bin/agent-merge-gate --help
+
+merge-observe-help:
+	bin/agent-merge-observe --help
