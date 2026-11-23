@@ -170,18 +170,9 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
             lock_stream.close()
 
 
-def command_checkpoint(args: argparse.Namespace) -> int:
-    agent = safe_id(args.agent, "agent")
-    task_id = safe_id(args.task_id, "task_id")
-    for label, value in vars(args).items():
-        if isinstance(value, str):
-            reject_secret(value, label)
-    workspace = Path(args.workspace).expanduser().resolve()
-    root = state_root(workspace, args.state_root)
-    task_path = path_for(root, "tasks", task_id)
-    task = read_json(task_path)
-    if not task:
-        raise ValueError(f"task does not exist: {task_id}")
+def build_checkpoint(task: dict[str, Any], *, task_id: str, agent: str, workspace: Path,
+                     next_action: str | None = None, resume_note: str | None = None,
+                     previous: dict[str, Any] | None = None) -> dict[str, Any]:
     if task.get("agent") != agent:
         raise ValueError(f"task belongs to agent {task.get('agent', '?')}, not {agent}")
     if task.get("task_status") == "done" or task.get("state") == "done":
@@ -196,7 +187,8 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         ref_path = Path(reference)
         if ref_path.is_absolute() or ".." in ref_path.parts:
             raise ValueError("references must be workspace-relative paths")
-    checkpoint = {
+    previous = previous or {}
+    return {
         "schema_version": 1,
         "task_id": task_id,
         "agent": agent,
@@ -212,10 +204,27 @@ def command_checkpoint(args: argparse.Namespace) -> int:
         "head_sha": task.get("commit"),
         "pr": task.get("pr"),
         "test": task.get("test"),
-        "next_action": args.next_action or task.get("next_action") or task.get("goal"),
-        "resume_note": args.resume_note or task.get("resume_note"),
+        "next_action": next_action or task.get("next_action") or previous.get("next_action") or task.get("goal"),
+        "resume_note": resume_note or task.get("resume_note") or previous.get("resume_note"),
         "references": references,
     }
+
+
+def command_checkpoint(args: argparse.Namespace) -> int:
+    agent = safe_id(args.agent, "agent")
+    task_id = safe_id(args.task_id, "task_id")
+    for label, value in vars(args).items():
+        if isinstance(value, str):
+            reject_secret(value, label)
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_path = path_for(root, "tasks", task_id)
+    task = read_json(task_path)
+    if not task:
+        raise ValueError(f"task does not exist: {task_id}")
+    checkpoint = build_checkpoint(task, task_id=task_id, agent=agent, workspace=workspace,
+                                  next_action=args.next_action, resume_note=args.resume_note,
+                                  previous=read_json(path_for(root, "checkpoints", task_id)))
     atomic_write(path_for(root, "checkpoints", task_id), checkpoint)
     print(json.dumps(checkpoint, ensure_ascii=False, indent=2))
     return 0
@@ -381,6 +390,19 @@ def command_status(args: argparse.Namespace) -> int:
                       | ({"blocked_reason"} if args.clear_blocked else set())),
         lock=True,
     )
+    checkpoint_event = args.command in {"begin", "test", "end"} or any(
+        value is not None for value in (
+            args.repo, args.repo_dir, args.phase, args.state, args.task_status, args.goal,
+            args.branch, args.commit, args.pr, args.test_status, args.test_summary,
+            args.event, args.blocked_reason,
+        )
+    )
+    if checkpoint_event and task.get("task_status") != "done":
+        checkpoint_path = path_for(root, "checkpoints", task_id)
+        previous_checkpoint = read_json(checkpoint_path)
+        checkpoint = build_checkpoint(task, task_id=task_id, agent=agent, workspace=workspace,
+                                      previous=previous_checkpoint)
+        atomic_write(checkpoint_path, checkpoint)
     print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
     return 0
 

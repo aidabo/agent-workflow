@@ -31,6 +31,18 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(task["phase"], "coding")
             self.assertEqual(task["task_status"], "in_progress")
 
+    def test_begin_and_test_events_create_checkpoint_but_heartbeat_does_not_change_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            checkpoint = Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json"
+            self.assertTrue(checkpoint.exists())
+            first = checkpoint.read_text()
+            self.assertEqual(main(["heartbeat", *args]), 0)
+            self.assertEqual(checkpoint.read_text(), first)
+            self.assertEqual(main(["test", *args, "--test-status", "passed", "--test-summary", "unit"]), 0)
+            self.assertNotEqual(checkpoint.read_text(), first)
+
     def test_checkpoint_rejects_unknown_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main([
