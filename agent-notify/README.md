@@ -28,7 +28,7 @@ Repo-managed notification assets for tmux -> Discord stop notifications.
 
 ## Status board (`monitor.sh`, `status.py`)
 
-A separate tmux session, `agents-monitor`, shows the cross-review status and what each agent is doing — so the work panes stay clean and you look only when you want to. Detailed per-turn notifications go to Discord (stop-notify), not here.
+A separate tmux session, `agent-workflow-monitor`, shows the cross-review status and what each agent is doing — so the work panes stay clean and you look only when you want to. Detailed per-turn notifications go to Discord (stop-notify), not here. Set `AGENTS_MONITOR_SESSION` to override it.
 
 - one board for all workspaces: it lists every tmux session that has AI panes, and cross-review covers every repo in its config
 - `start-agents.sh` creates it in the background; `monitor.sh` (`yarn monitor` in a repo whose package.json has `"monitor": "bash <path to>/agent-notify/monitor.sh"`) creates it if missing and switches to it — inside tmux it switches the client, outside it attaches. `prefix + L` takes you back

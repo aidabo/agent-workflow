@@ -1,0 +1,13 @@
+# Tracked runtime files intentionally specialized for 11-agent-workflow.
+# They are excluded from the 10-agent-tools copy-manifest comparison.
+agent-notify/monitor.sh
+agent-notify/start-agents.sh
+cross-review/PROTOCOL.md
+cross-review/README.md
+cross-review/config.local.example.sh
+cross-review/config.sh
+cross-review/cross-review.sh
+cross-review/install.sh
+cross-review/live.py
+cross-review/live.sh
+cross-review/merge_gate.py

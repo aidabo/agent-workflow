@@ -65,7 +65,7 @@ IN REVIEW の行には、いま何をしているかが出る: `running tests 0:
 
 ## 何をするか
 
-1. `gh pr view` で head SHA を取り、**レビュー用 worktree**（`01-ghost-front-review` など、作業ツリーの隣）に
+1. `gh pr view` で head SHA を取り、**レビュー用 worktree**（`01-ghost-front-agent-workflow-review` など、作業ツリーの隣）に
    detach で展開する。作者のツリー・共用ツリーのブランチは動かさない。node_modules と `apps/*/.env*` は作者の
    ツリーへの symlink（読むだけ）。
 2. **テストはスクリプトが走らせる**（`config.local.sh` の `test_cmds_for`。host は typecheck と変更ファイルに関係する
@@ -80,7 +80,7 @@ IN REVIEW の行には、いま何をしているかが出る: `running tests 0:
    cron の次の巡回で再試行する。送ったポインタには `.notified`（中身は送った先のエージェントの PID）が付く。
    そのエージェントのセッションが閉じた・再起動したら、新しいセッションに送り直す。作者は `PROTOCOL.md` に従って直す。
 
-同じ PR head × レビュアーは二度レビューしない（`~/.cache/cross-review/state/`）。push で head が変われば再レビュー。
+同じ PR head × レビュアーは二度レビューしない（`~/.cache/agent-workflow/cross-review/state/`）。push で head が変われば再レビュー。
 
 ## 秘密の値の検査
 
@@ -124,11 +124,11 @@ PR のコードはこの PC でテストとして実行され（`.env` も見え
 
 | 何 | どこ |
 |---|---|
-| レビュー結果（本文） | `<ワークスペース>/.agent-tools/reviews/<repo>-pr<N>-<sha8>-<reviewer>.md`（ワークスペース = 作業ツリーから上へたどって `agents.yaml` がある所。例 `~/work/legacy/.agent-tools/reviews/`。`REPORT_DIR` を書けば 1 か所に固定）と、同じ内容の PR コメント |
+| レビュー結果（本文） | `<ワークスペース>/.agent-workflow/reviews/<repo>-pr<N>-<sha8>-<reviewer>.md`（ワークスペース = 作業ツリーから上へたどって `agents.yaml` がある所。`REPORT_DIR` を書けば 1 か所に固定）と、同じ内容の PR コメント |
 | テストのログ | 同じ場所の `<repo>-pr<N>-<sha8>-tests.log` |
-| レビュー済みの印 | `~/.cache/cross-review/state/<repo>-<N>-<sha8>-<reviewer>.done` |
+| レビュー済みの印 | `~/.cache/agent-workflow/cross-review/state/<repo>-<N>-<sha8>-<reviewer>.done` |
 | 作者への受け渡し | `inbox/<agent>/*.txt`（作者が対応したら消す）、`.notified` |
-| 巡回のログ | `~/.cache/cross-review/watch.log` |
+| 巡回のログ | `~/.cache/agent-workflow/cross-review/watch.log` |
 | 実行中の様子 | レビュー用 worktree の `.cross-review/`（`phase`、`<reviewer>.events.jsonl`。次のレビューで上書き） |
 
 すべてこの PC のファイル（と GitHub の PR コメント）で、agent-tools のリポジトリには入れない（公開リポジトリなので、
@@ -154,8 +154,8 @@ DeepSeek の Claude Code も `Co-Authored-By: Claude` を付けるので、deeps
 ```
 
 - パスの設定は要らない。install.sh の場所から watch.sh の場所を決めるので、どこに clone してもよい。
-  cron の行は 1 本だけで、前の行（別の場所に clone していた分も）は消して入れ直す。変える前の crontab は
-  `~/.cache/cross-review/crontab.bak.<日時>` に残る。何度実行してもよい。
+  11-agent-workflow自身のmarker付きcron行だけを更新する。10-agent-toolsのcron行は変更しない。変える前のcrontabは
+  `~/.cache/agent-workflow/cross-review/crontab.bak.<日時>` に残る。何度実行してもよい。
 - 確認すること: cron が動いているか（WSL は `/etc/wsl.conf` の `[boot] systemd=true`）、`config.local.sh`
   （無ければひな形を作る）と `REPOS` の作業ツリー、`git gh python3 flock tmux timeout`、`gh` のログイン、
   レビュアーの `claude` / `codex` / `deepseek` が cron の PATH から見えるか（見えなければ `EXTRA_PATH` に足す）。
@@ -167,7 +167,7 @@ DeepSeek の Claude Code も `Co-Authored-By: Claude` を付けるので、deeps
 入る行（例）:
 
 ```
-* * * * * $HOME/path/to/agent-tools/cross-review/watch.sh >> $HOME/.cache/cross-review/watch.log 2>&1
+* * * * * $HOME/path/to/agent-workflow/cross-review/watch.sh >> $HOME/.cache/agent-workflow/cross-review/watch.log 2>&1 # agent-workflow-cross-review-watch
 ```
 
 ## 各エージェントへの指示

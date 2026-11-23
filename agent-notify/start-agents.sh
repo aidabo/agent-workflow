@@ -224,7 +224,7 @@ if [[ -z "$session" ]]; then
 fi
 if [[ -z "$session" ]]; then
   # tmux session names can't contain "." or ":"
-  session="$(basename "$repo_root" | tr '.:' '__')-agents"
+  session="$(basename "$repo_root" | tr '.:' '__')-agent-workflow-agents"
 fi
 
 if [[ -z "$N" || "$N" -eq 0 ]]; then
