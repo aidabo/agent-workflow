@@ -20,7 +20,7 @@ class MonitorCheckpointTests(unittest.TestCase):
             }))
             (root / "checkpoints/task-1.json").write_text("x" * (512 * 1024 + 1))
             lines = format_task_lines(root)
-            self.assertIn("cp=512KB!", lines[0])
+            self.assertIn("cp=512KB·0m!", lines[0])
 
 
 if __name__ == "__main__":

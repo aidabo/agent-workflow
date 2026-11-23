@@ -78,16 +78,26 @@ bin/agent-workflow resume --workspace "$PWD"
 
 初期版の`resume`は表示・prompt生成までとし、agent paneを自動再起動しない。重複実装や同じPRへの二重pushを防ぐためである。
 
-resumeの出力例：
+resumeのJSON出力例：
 
-```text
-RESUME CANDIDATE: runner-001
-phase=coding task_status=in_progress state=stale
-branch=feat/runner-config pr=123 head_sha=01234567
-last_test=passed: unit tests
-next_action=レビュー指摘の中2件を修正する
-warning=worktree has uncommitted changes; human confirmation required
-prompt=同じbranchの未完了作業から続けてください。新しいPRや重複pushは作らないでください。
+```json
+{
+  "resume_candidates": [
+    {
+      "task_id": "runner-001",
+      "phase": "coding",
+      "task_status": "in_progress",
+      "state": "stale",
+      "branch": "feat/runner-config",
+      "pr": 123,
+      "head_sha": "01234567",
+      "next_action": "レビュー指摘の中2件を修正する",
+      "warning": ["task state is stale; human confirmation required"],
+      "prompt": "同じbranchの未完了作業から続けてください。新しいPRや重複pushは作らないでください。"
+    }
+  ],
+  "errors": []
+}
 ```
 
 ## checkpointサイズとcleanup
