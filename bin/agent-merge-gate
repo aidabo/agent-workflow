@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Read-only eligibility check for the future auto-merge executor.
+# It never calls gh pr merge; exit 0 means eligible, exit 2 means blocked.
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+# shellcheck source=../cross-review/config.sh
+source "$here/cross-review/config.sh"
+
+repo_name=""
+pr_number=""
+for arg in "$@"; do
+  case "$arg" in
+    --repo=*) repo_name="${arg#*=}" ;;
+    --pr=*) pr_number="${arg#*=}" ;;
+    --help|-h)
+      echo "usage: agent-merge-gate --repo=<cross-review name> --pr=<number>"
+      exit 0
+      ;;
+    *) echo "unknown argument: $arg" >&2; exit 64 ;;
+  esac
+done
+[[ -n "$repo_name" && -n "$pr_number" ]] || {
+  echo "--repo and --pr are required" >&2
+  exit 64
+}
+
+gh_repo=""; src=""
+for entry in "${REPOS[@]}"; do
+  IFS='|' read -r name candidate candidate_src _worktree <<<"$entry"
+  if [[ "$name" == "$repo_name" ]]; then
+    gh_repo="$candidate"
+    src="$candidate_src"
+    break
+  fi
+done
+[[ -n "$gh_repo" ]] || { echo "unknown cross-review repo: $repo_name" >&2; exit 64; }
+
+json="$(gh pr view "$pr_number" -R "$gh_repo" --json state,isDraft,baseRefName,headRefOid,labels,author)"
+agent="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(next((x["name"].split(":",1)[1] for x in d.get("labels",[]) if x["name"].startswith("author:")), ""))' <<<"$json")"
+[[ -n "$agent" ]] || { echo "missing author:<agent> label" >&2; exit 2; }
+reviewers="$(reviewers_for "$agent")"
+report_dir="$(report_dir_for "$src")"
+changed_files="$(gh api "repos/$gh_repo/pulls/$pr_number/files" --paginate --jq '.[].filename')"
+
+CR_NO_COLOR=1 PYTHONPATH="$here/cross-review" python3 "$here/cross-review/merge_gate.py" \
+  --json "$json" \
+  --repo-name "$repo_name" \
+  --pr "$pr_number" \
+  --state-dir "$STATE_DIR" \
+  --report-dir "$report_dir" \
+  --reviewers "$reviewers" \
+  --changed-files "$changed_files"

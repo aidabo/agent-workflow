@@ -41,7 +41,15 @@ review待ちの外部APIがcoding/test更新をブロックしない。
 - review上限をneeds_humanにする
 - docs PRとcode PRをparent/childで紐付ける
 
-自動merge・自動deploy・自動task割当はこのrepositoryの初期範囲に含めない。
+### 段階4: auto-merge gate dry-run
+
+- 最新headに対する全レビュアーの`APPROVE`、テスト成功、secret scan成功を判定する
+- `automation:auto-merge`ラベルのないPRは対象外にする
+- production設定・AWS・認証・migrationなどの変更は対象外にする
+- `bin/agent-merge-gate`は判定だけを行い、`gh pr merge`は呼ばない
+- dry-runを一定期間観測してから、低リスク変更だけを対象にmerge executorを別PRで検討する
+
+自動deploy・自動task割当はこのrepositoryの初期範囲に含めない。
 
 ## test plan
 
