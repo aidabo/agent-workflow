@@ -1,0 +1,74 @@
+# Auto-merge gate（Phase 4 dry-run）
+
+## 目的
+
+configで指定された全レビュアーが、同じ最新 headに対して`APPROVE`したPRを機械的に判定する。
+この段階では `gh pr merge` を呼ばず、判定結果だけを出す。既存の「マージは人が行う」という境界を壊さず、深夜運用で誤判定がないかを観測するためである。
+
+```mermaid
+flowchart LR
+  PR[PR] --> H{最新head}
+  H --> R{全レビューがAPPROVE}
+  R --> T{テスト成功・secret scan成功}
+  T --> L{automation:auto-merge}
+  L --> P{危険なパスなし}
+  P --> E[ELIGIBLE: dry-run]
+  R -->|no| B[BLOCKED]
+  T -->|no| B
+  L -->|no| B
+  P -->|no| B
+```
+
+## 使い方
+
+```bash
+bin/agent-merge-gate --repo=agent-workflow --pr=123
+```
+
+- exit `0`: `ELIGIBLE`。自動マージ可能な条件を満たしたが、まだmergeしない
+- exit `2`: `BLOCKED`。理由を1行ずつ表示する
+- その他: 設定・引数・GitHub取得エラー
+
+判定は現在のPR headに紐づくreview reportだけを使用する。過去のheadで両方が承認していても、現在のheadにレポートがなければblockedになる。
+
+## 必須条件
+
+- open、draftではない、base branchが`main`
+- `automation:auto-merge`ラベルが付いている
+- configの全レビュアーにreportがあり、全員が`APPROVE`
+- 各reportのテスト結果が実行済みかつ成功
+- secret scanが成功
+- `.github/`、`deploy/`、`infra/`、`migrations/`、`terraform/`、production用env/composeを変更していない
+
+ラベルがないPRは、両方が`APPROVE`でも自動対象にならない。docsだけを自動化したい場合も、対象PRに明示的にラベルを付ける。
+
+## GitHub側の設定（merge executor導入時）
+
+Phase 3では設定だけ確認し、mergeは実行しない。将来executorを有効にする場合は、対象repositoryのSettingsで以下を設定する。
+
+1. `main`をprotected branchまたはrulesetにする
+2. pull requestを必須にする
+3. required status checksを必須にする
+4. conversation resolutionを必須にする
+5. force pushを禁止する
+6. Auto-mergeを許可する
+7. executorは`gh pr merge --auto --squash`を使い、branch protectionを迂回しない
+
+GitHubのrequired reviews・status checks・conversation resolutionはprotected branchで設定できる。Auto-mergeもrepository設定で有効化が必要である。
+
+## まだ実行しない理由
+
+cross-reviewの`APPROVE`は現在、GitHubの正式review approvalではなくローカルreportとPRコメントである。また、agent-workflowの初期設計では人のmerge判断を残している。
+
+そのため、次の段階で初めてmerge executorを追加する。
+
+1. dry-runをcronで1週間観測
+2. `ELIGIBLE`と`BLOCKED`の誤判定がないことを確認
+3. docs/testだけをallowlistにしてexecutorを別PRで追加
+4. production設定、AWS、認証、DB、依存関係変更は常に人の確認にする
+
+## 関連
+
+- [workflow.md](workflow.md)
+- [implementation-plan.md](implementation-plan.md)
+- [monitor.md](monitor.md)

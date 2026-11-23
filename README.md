@@ -43,6 +43,7 @@ flowchart LR
 - [migration-from-10-agent-tools.md](docs/migration-from-10-agent-tools.md) — copy範囲、除外範囲、切替、rollback
 - [phase2-live-smoke.md](docs/phase2-live-smoke.md) — standalone monitorの一時tmux/workspace smoke
 - [behavior-lock.md](docs/behavior-lock.md) — copy manifest、old/new snapshot、parallel task検証
+- [auto-merge-gate.md](docs/auto-merge-gate.md) — 両レビュアー承認を判定するdry-run gate
 
 ## Copied runtime
 
@@ -62,6 +63,9 @@ bin/cross-review      # local cross-review
 
 最初はstatus metadataとmonitor表示だけを実装する。task自動割当、agent自動起動、自動mergeは
 後回しにする。人の判断境界を保ったまま、現在の「何をしているか分かりにくい」問題を解消する。
+
+auto-mergeはPhase 4でdry-runから段階導入する。`bin/agent-merge-gate`は判定だけを行い、
+GitHubへのmerge操作はしない。
 
 ## Phase 1 quick start
 

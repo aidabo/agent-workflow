@@ -1,7 +1,7 @@
-.PHONY: test check migration-check behavior-lock
+.PHONY: test check migration-check behavior-lock merge-gate-help
 
 test:
-	python3 -m unittest discover -s tests -v
+	for test in tests/test_*.py; do python3 -m unittest "$$test" -v || exit 1; done
 	python3 -m unittest cross-review/test_status.py -v
 
 check: test
@@ -12,3 +12,6 @@ migration-check:
 
 behavior-lock:
 	bash scripts/behavior-lock.sh
+
+merge-gate-help:
+	bin/agent-merge-gate --help
