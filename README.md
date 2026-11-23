@@ -52,11 +52,11 @@ flowchart LR
 直接使う入口は次のwrapperである。
 
 ```bash
-bin/agent-start       # tmux agentsを起動
+bin/agent-start       # tmux agentsを起動（内部入口）
 bin/agent-monitor     # monitorへ移動
 bin/agent-status      # task/heartbeat/status metadata
 bin/cross-review      # local cross-review
-bin/agent-workflow    # project-facing command router
+bin/agent-workflow    # project-facing command router（通常は agent / monitor）
 ```
 
 `cross-review/config.local.sh`、inbox、review report、runtime state、secretは各環境で作る。

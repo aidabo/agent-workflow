@@ -33,7 +33,7 @@ REPOS=(
 
 ```bash
 WORKFLOW=/home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow
-"$WORKFLOW" start
+"$WORKFLOW" agent
 "$WORKFLOW" monitor
 "$WORKFLOW" status begin \
   --workspace "$PWD" --agent codex --task-id task-001 \
@@ -41,6 +41,8 @@ WORKFLOW=/home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow
   --goal "実装する"
 "$WORKFLOW" review
 ```
+
+利用者が通常使う入口は`agent`と`monitor`の2つである。`agent`は設定確認後にtmux agentを起動し、`monitor`は監視画面を開く。`status`、`review`、`gate`、`observe`は個別操作やcron用の上級者向け入口として残している。
 
 ## auto-merge dry-run
 

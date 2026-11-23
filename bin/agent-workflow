@@ -10,6 +10,7 @@ usage: bin/agent-workflow <command> [args...]
 
 commands:
   check       validate local tools and cross-review configuration
+  agent       validate configuration and start configured tmux agents
   start       start configured tmux agents
   monitor     open the agent monitor
   status      read or update task status metadata
@@ -39,6 +40,7 @@ shift || true
 case "$command_name" in
   help|-h|--help) usage ;;
   check) check_config ;;
+  agent) check_config; exec "$root/bin/agent-start" "$@" ;;
   start) exec "$root/bin/agent-start" "$@" ;;
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
