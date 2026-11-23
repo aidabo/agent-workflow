@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 from pathlib import Path
+
+SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def state_root() -> Path:
@@ -42,10 +46,27 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
         test = record.get("test") or {}
         test_status = (test.get("status") or "-") if isinstance(test, dict) else "-"
         pr = f"#{record['pr']}" if record.get("pr") else "-"
+        task_id = record.get("task_id", "?")
+        checkpoint = (root or state_root()) / "checkpoints" / f"{task_id}.json"
+        checkpoint_info = ""
+        try:
+            if not isinstance(task_id, str) or not SAFE_ID.fullmatch(task_id):
+                raise OSError("invalid task id")
+            stat = checkpoint.stat()
+            size = stat.st_size
+            shown = f"{size / 1024:.0f}KB" if size >= 1024 else f"{size}B"
+            age = max(0, int(time.time() - stat.st_mtime))
+            age_label = f"{age // 3600}h" if age >= 3600 else f"{age // 60}m"
+            checkpoint_info = f" cp={shown}·{age_label}"
+            if size > 512 * 1024:
+                checkpoint_info += "!"
+        except OSError:
+            pass
         line = (
             f"  {record.get('agent', '?')} [{record.get('phase', '?')}] "
             f"{record.get('task_id', '?')} {record.get('state', '?')} "
             f"test={test_status} PR={pr} hb={record.get('heartbeat_at', '-')}"
+            f"{checkpoint_info}"
         )
         if record.get("error"):
             line += " ERROR"
