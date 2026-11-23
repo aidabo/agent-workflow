@@ -1,5 +1,28 @@
 # Workflow state machine
 
+## workflow全体
+
+```mermaid
+flowchart TD
+  R[要件・目的] --> P[plan/docs]
+  P --> D[docs review]
+  D --> DH[人のdocs確認・merge]
+  DH --> S[task分割・割り当て]
+  S --> C[coding]
+  C --> T[test]
+  T --> PR[code PR]
+  PR --> CR[cross-review]
+  CR -->|APPROVE| CH[人のcode確認・merge]
+  CR -->|CHANGES_REQUESTED| C
+  CR -->|NEEDS YOU / max rounds| H[人の判断]
+  H -->|再開| C
+  C -.重要イベント.-> CP[checkpoint]
+  CP -->|再起動後| RS[resume prompt]
+  RS --> C
+```
+
+`checkpoint`はtaskの進行を表す`phase/state/task_status`とは別の復元用metadataである。`resume`は自動で実装を再開せず、人がbranch・PR・未commit変更を確認してからagentへ指示する。
+
 ## task_statusの遷移
 
 下の図は`task_status`だけを表す。`phase`と`state`は直交するmetadataであり、図のnode名に
