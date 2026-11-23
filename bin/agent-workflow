@@ -3,6 +3,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+CONFIG_ERROR=78
 
 usage() {
   cat <<'EOF'
@@ -22,38 +23,51 @@ EOF
 }
 
 check_config() {
+  local mode="${1:-full}" quiet=0 need_tmux=1
+  case "$mode" in
+    gate|observe) quiet=1; need_tmux=0 ;;
+    cron) need_tmux=0 ;;
+    full|agent) ;;
+    *) echo "unknown check mode: $mode" >&2; return 64 ;;
+  esac
   local config="${CROSS_REVIEW_CONFIG:-$root/cross-review/config.local.sh}"
   [[ -f "$config" ]] || {
     echo "missing config: $config" >&2
     echo "copy cross-review/config.local.example.sh to config.local.sh" >&2
-    return 2
+    return "$CONFIG_ERROR"
   }
-  command -v gh >/dev/null || { echo "missing command: gh" >&2; return 2; }
-  gh auth status >/dev/null 2>&1 || { echo "gh is not authenticated" >&2; return 2; }
-  command -v python3 >/dev/null || { echo "missing command: python3" >&2; return 2; }
-  command -v flock >/dev/null || { echo "missing command: flock" >&2; return 2; }
-  command -v tmux >/dev/null || { echo "missing command: tmux" >&2; return 2; }
+  command -v python3 >/dev/null || { echo "missing command: python3" >&2; return "$CONFIG_ERROR"; }
+  if [[ "$mode" != agent ]]; then
+    command -v gh >/dev/null || { echo "missing command: gh" >&2; return "$CONFIG_ERROR"; }
+    gh auth status >/dev/null 2>&1 || { echo "gh is not authenticated" >&2; return "$CONFIG_ERROR"; }
+    command -v flock >/dev/null || { echo "missing command: flock" >&2; return "$CONFIG_ERROR"; }
+  fi
+  if (( need_tmux )); then
+    command -v tmux >/dev/null || { echo "missing command: tmux" >&2; return "$CONFIG_ERROR"; }
+  fi
   CROSS_REVIEW_CONFIG="$config" source "$root/cross-review/config.sh"
-  (( ${#REPOS[@]} > 0 )) || { echo "REPOS is empty in $config" >&2; return 2; }
-  echo "OK: config=$config repos=${#REPOS[@]} gh=$(command -v gh) flock=$(command -v flock)"
+  (( ${#REPOS[@]} > 0 )) || { echo "REPOS is empty in $config" >&2; return "$CONFIG_ERROR"; }
+  if (( !quiet )); then
+    echo "OK: config=$config repos=${#REPOS[@]} python3=$(command -v python3)"
+  fi
 }
 
 command_name="${1:-help}"
 shift || true
 case "$command_name" in
   help|-h|--help) usage ;;
-  check) check_config ;;
-  agent) check_config; exec "$root/bin/agent-start" "$@" ;;
+  check) check_config full ;;
+  agent) check_config agent; exec "$root/bin/agent-start" "$@" ;;
   start) exec "$root/bin/agent-start" "$@" ;;
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
   review) exec "$root/bin/cross-review" "$@" ;;
-  gate) check_config; exec "$root/bin/agent-merge-gate" "$@" ;;
-  observe) check_config; exec "$root/bin/agent-merge-observe" "$@" ;;
+  gate) check_config gate; exec "$root/bin/agent-merge-gate" "$@" ;;
+  observe) check_config observe; exec "$root/bin/agent-merge-observe" "$@" ;;
   cron)
     cron_action="${1:-check}"
     case "$cron_action" in
-      install|check) check_config ;;
+      install|check) check_config cron ;;
       uninstall) ;;
       *) echo "usage: bin/agent-workflow cron {check|install|uninstall}" >&2; exit 64 ;;
     esac

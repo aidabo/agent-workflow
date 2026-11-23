@@ -56,14 +56,14 @@ REPOS=(
 | `agent` | `check`後にtmuxのagent paneを起動する | 毎日の作業開始 |
 | `monitor` | agent/task/cross-reviewの監視画面を開く | 作業状況の確認 |
 | `status` | taskのbegin、heartbeat、test、context、endを操作する | agentがtask状態を更新するとき |
-| `review` | standalone cross-review wrapperを呼び出す | PRを手動でレビュー開始・履歴確認するとき |
+| `review` | standalone cross-review wrapperを呼び出す | 1件のPRを手動でレビューするとき |
 | `gate` | 1件のPRをdry-run判定する | 1件の`ELIGIBLE`/`BLOCKED`確認 |
 | `observe` | `automation:auto-merge`ラベル付きopen PRを一括観測する | cron、夜間のdry-run観測 |
 | `cron check` | cross-reviewとobserverのcron登録状態を確認する | 初回設定の確認 |
 | `cron install` | cross-review watchとobserverをcrontabへ登録する | 自動レビュー・夜間観測を有効化 |
 | `cron uninstall` | 上記cron登録を解除する | 自動実行を止める |
 
-`agent`と`monitor`は利用者向けの主要commandである。`check`は破壊的操作をせず、設定不備なら非0で終了する。`gate`はexit `0`がELIGIBLE、exit `2`が通常のBLOCKED、その他がgate errorである。`observe`は通常のBLOCKEDでは成功終了し、GitHub一覧取得やgate自体のエラーがある場合だけ非0で終了する。
+`agent`と`monitor`は利用者向けの主要commandである。`check`は破壊的操作をせず、設定不備ならexit `78`で終了する。`gate`はexit `0`がELIGIBLE、exit `2`が通常のBLOCKED、exit `78`が設定不備、その他がgate errorである。`observe`は通常のBLOCKEDでは成功終了し、GitHub一覧取得やgate自体のエラーがある場合だけ非0で終了する。`gate`と`observe`はtmuxを必要としないため、cron環境でも実行できる。
 
 詳細commandの例：
 
