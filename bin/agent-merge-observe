@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Observe opt-in auto-merge candidates without merging anything.
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "usage: agent-merge-observe"
+  echo "writes JSONL observations to \$AUTO_MERGE_OBSERVE_LOG or ~/.cache/agent-workflow/"
+  exit 0
+fi
+
+# shellcheck source=../cross-review/config.sh
+source "$here/cross-review/config.sh"
+
+log_file="${AUTO_MERGE_OBSERVE_LOG:-$HOME/.cache/agent-workflow/auto-merge-observe.jsonl}"
+log_dir="$(dirname "$log_file")"
+mkdir -p "$log_dir"
+chmod 700 "$log_dir"
+touch "$log_file"
+chmod 600 "$log_file"
+
+append_record() {
+  local repo_name="$1" gh_repo="$2" pr_number="$3" exit_code="$4" output="$5"
+  OBSERVED_OUTPUT="$output" python3 - "$log_file" "$repo_name" "$gh_repo" "$pr_number" "$exit_code" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+log_file, repo_name, gh_repo, pr_number, exit_code = sys.argv[1:]
+record = {
+    "observed_at": datetime.now(timezone.utc).isoformat(),
+    "repo": repo_name,
+    "github_repo": gh_repo,
+    "pr": int(pr_number),
+    "exit_code": int(exit_code),
+    "output": os.environ.get("OBSERVED_OUTPUT", "").rstrip(),
+}
+with open(log_file, "a", encoding="utf-8") as stream:
+    stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+PY
+}
+
+for entry in "${REPOS[@]}"; do
+  IFS='|' read -r repo_name gh_repo _src _worktree <<<"$entry"
+  set +e
+  pr_numbers="$(gh pr list -R "$gh_repo" --state open --limit 100 \
+    --json number,labels \
+    --jq '.[] | select(any(.labels[]?; .name == "automation:auto-merge")) | .number' 2>&1)"
+  list_exit=$?
+  set -e
+  if [[ $list_exit -ne 0 ]]; then
+    append_record "$repo_name" "$gh_repo" "0" "$list_exit" "$pr_numbers"
+    continue
+  fi
+  while IFS= read -r pr_number; do
+    [[ -n "$pr_number" ]] || continue
+    set +e
+    output="$("$here/bin/agent-merge-gate" --repo="$repo_name" --pr="$pr_number" 2>&1)"
+    gate_exit=$?
+    set -e
+    append_record "$repo_name" "$gh_repo" "$pr_number" "$gate_exit" "$output"
+  done <<<"$pr_numbers"
+done

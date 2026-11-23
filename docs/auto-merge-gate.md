@@ -44,7 +44,7 @@ bin/agent-merge-gate --repo=agent-workflow --pr=123
 
 ## GitHub側の設定（merge executor導入時）
 
-Phase 3では設定だけ確認し、mergeは実行しない。将来executorを有効にする場合は、対象repositoryのSettingsで以下を設定する。
+Phase 4では設定だけ確認し、mergeは実行しない。将来executorを有効にする場合は、対象repositoryのSettingsで以下を設定する。
 
 1. `main`をprotected branchまたはrulesetにする
 2. pull requestを必須にする
@@ -56,11 +56,30 @@ Phase 3では設定だけ確認し、mergeは実行しない。将来executorを
 
 GitHubのrequired reviews・status checks・conversation resolutionはprotected branchで設定できる。Auto-mergeもrepository設定で有効化が必要である。
 
-## まだ実行しない理由
+## dry-run観測
 
 cross-reviewの`APPROVE`は現在、GitHubの正式review approvalではなくローカルreportとPRコメントである。また、agent-workflowの初期設計では人のmerge判断を残している。
 
-そのため、次の段階で初めてmerge executorを追加する。
+対象PRに\`automation:auto-merge\`ラベルを付けた状態で、次を実行する。
+
+\`\`\`bash
+bin/agent-merge-observe
+tail -n 1 ~/.cache/agent-workflow/auto-merge-observe.jsonl
+\`\`\`
+
+\`agent-merge-observe\`はラベル付きのopen PRだけを取得し、\`bin/agent-merge-gate\`の結果をJSONLへ追記する。ログには時刻、repository、PR、exit code、判定理由が入り、\`gh pr merge\`は呼ばない。ログディレクトリは\`0700\`、ログは\`0600\`で作成する。
+
+cronの例（5分間隔）は次のとおりである。
+
+\`\`\`cron
+*/5 * * * * /home/aidabo/work/legacy/11-agent-workflow/bin/agent-merge-observe >> /home/aidabo/.cache/agent-workflow/auto-merge-observe.cron.log 2>&1
+\`\`\`
+
+1週間観測し、\`ELIGIBLE\`の誤判定がないこと、\`BLOCKED\`の理由が想定内であること、GitHub API障害時にmerge操作が起きないことを確認する。
+
+## merge executor導入時
+
+観測後、次の段階で初めてmerge executorを追加する。
 
 1. dry-runをcronで1週間観測
 2. `ELIGIBLE`と`BLOCKED`の誤判定がないことを確認
