@@ -67,7 +67,7 @@ bin/agent-merge-observe
 tail -n 1 ~/.cache/agent-workflow/auto-merge-observe.jsonl
 ```
 
-`agent-merge-observe`はサーバー側で`automation:auto-merge`ラベルを付けたopen PRだけを取得し、`bin/agent-merge-gate`の結果をJSONLへ追記する。ログには時刻、repository、PR、exit code、判定種別、判定理由が入り、`gh pr merge`は呼ばない。ログディレクトリは新規作成時だけ`0700`、ログは`0600`で作成する。既存の共有ディレクトリの権限は変更しない。
+`agent-merge-observe`はサーバー側で`automation:auto-merge`ラベルを付けたopen PRだけを取得し、`bin/agent-merge-gate`の結果をJSONLへ追記する。ログには時刻、repository、PR、exit code、判定種別、判定理由が入り、`gh pr merge`は呼ばない。ログディレクトリは新規作成時だけ`0700`、ログは`0600`で作成する。既存の共有ディレクトリの権限は変更しない。observerはlockを取り、前回実行がまだ動いている場合は重複実行しない。
 
 cronの例（5分間隔）は次のとおりである。
 
@@ -75,7 +75,7 @@ cronの例（5分間隔）は次のとおりである。
 */5 * * * * /path/to/11-agent-workflow/bin/agent-merge-observe >> $HOME/.cache/agent-workflow/auto-merge-observe.cron.log 2>&1
 ```
 
-1週間観測し、`ELIGIBLE`の誤判定がないこと、`BLOCKED`の理由が想定内であること、GitHub API障害時にmerge操作が起きないことを確認する。cronでは`gh`と`python3`がPATHにあることを確認し、JSONLログは週次で退避またはrotateする。API一覧取得の失敗は`kind: list_error`として記録され、observerも非0で終了する。
+1週間観測し、`ELIGIBLE`の誤判定がないこと、`BLOCKED`の理由が想定内であること、GitHub API障害時にmerge操作が起きないことを確認する。cronでは`gh`と`python3`がPATHにあることを確認し、JSONLログは週次で退避またはrotateする。API一覧取得の失敗は`kind: list_error`、gate実行自体の失敗は`kind: gate_error`として記録され、observerも非0で終了する。通常の判定blocked（exit 2）は観測エラーではない。
 
 ## merge executor導入時
 

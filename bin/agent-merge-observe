@@ -19,6 +19,10 @@ if [[ ! -d "$log_dir" ]]; then
 fi
 touch "$log_file"
 chmod 600 "$log_file"
+lock_file="${AUTO_MERGE_OBSERVE_LOCK:-$log_dir/auto-merge-observe.lock}"
+exec 9>"$lock_file"
+flock -n 9 || exit 0
+chmod 600 "$lock_file"
 failures=0
 
 append_record() {
@@ -66,7 +70,11 @@ for entry in "${REPOS[@]}"; do
     output="$("$here/bin/agent-merge-gate" --repo="$repo_name" --pr="$pr_number" 2>&1)"
     gate_exit=$?
     set -e
-    append_record "$repo_name" "$gh_repo" "$pr_number" "$gate_exit" "gate" "$output"
+    gate_kind="gate"
+    if [[ $gate_exit -ne 0 && $gate_exit -ne 2 ]]; then
+      gate_kind="gate_error"
+    fi
+    append_record "$repo_name" "$gh_repo" "$pr_number" "$gate_exit" "$gate_kind" "$output"
     if [[ $gate_exit -ne 0 && $gate_exit -ne 2 ]]; then
       failures=$((failures + 1))
     fi
