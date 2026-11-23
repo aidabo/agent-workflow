@@ -92,6 +92,8 @@ class StatusTests(unittest.TestCase):
             record["phase"] = "done"
             record["task_status"] = "done"
             output_path.write_text(json.dumps(record))
+            import os
+            os.utime(Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json", (1, 1))
             self.assertEqual(main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s", "--apply"]), 0)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").exists())
 
@@ -104,6 +106,7 @@ class StatusTests(unittest.TestCase):
             (root / "checkpoints/task-1.json").write_text("checkpoint")
             self.assertEqual(main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s", "--apply"]), 0)
             self.assertTrue((root / "checkpoints/task-1.json").exists())
+
     def test_begin_and_heartbeat_write_separate_atomic_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

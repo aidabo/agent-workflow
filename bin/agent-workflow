@@ -16,7 +16,7 @@ commands:
   monitor     open the agent monitor
   status      read or update task status metadata
   checkpoint  save a durable checkpoint for a task
-  checkpoint prune  list/delete old completed-task checkpoints
+  checkpoint prune  list/delete old completed-task checkpoints (--older-than 30d [--apply])
   resume      list unfinished tasks and resume prompts
   review      review one PR: <repo-name> <pr-number>
   gate        dry-run one PR: --repo=<name> --pr=<number>

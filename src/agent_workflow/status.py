@@ -328,17 +328,27 @@ def command_checkpoint_prune(args: argparse.Namespace) -> int:
     amount, unit = int(match.group(1)), match.group(2)
     seconds = amount * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
     cutoff = datetime.now(timezone.utc).timestamp() - seconds
-    candidates = []
-    for path in sorted((root / "checkpoints").glob("*.json")):
+    def prunable(path: Path) -> tuple[bool, int]:
         try:
-            if path.stat().st_mtime >= cutoff:
-                continue
+            stat = path.stat()
+            if stat.st_mtime >= cutoff:
+                return False, 0
             task = read_json(root / "tasks" / path.name)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            continue
+            return False, 0
         if not isinstance(task, dict) or task.get("state") != "done":
-            continue
-        candidates.append(str(path))
+            return False, 0
+        return True, stat.st_size
+
+    candidates = []
+    candidate_bytes = {}
+    for path in sorted((root / "checkpoints").glob("*.json")):
+        eligible, size = prunable(path)
+        if eligible:
+            candidates.append(str(path))
+            candidate_bytes[str(path)] = size
+    removed = []
+    removed_bytes = 0
     if args.apply:
         for name in candidates:
             path = Path(name)
@@ -346,15 +356,18 @@ def command_checkpoint_prune(args: argparse.Namespace) -> int:
             with open(lock_path, "a+", encoding="utf-8") as lock_stream:
                 fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
                 try:
-                    task = read_json(root / "tasks" / path.name)
-                    if (isinstance(task, dict) and task.get("state") == "done"
-                            and path.exists() and path.stat().st_mtime < cutoff):
+                    eligible, size = prunable(path)
+                    if eligible:
                         path.unlink()
+                        removed.append(name)
+                        removed_bytes += size
+                except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                    pass
                 finally:
                     fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
-    print(json.dumps({"dry_run": not args.apply, "removed": candidates if args.apply else [],
-                      "candidates": candidates, "count": len(candidates),
-                      "bytes": sum(Path(name).stat().st_size for name in candidates if Path(name).exists())},
+    print(json.dumps({"dry_run": not args.apply, "removed": removed,
+                      "candidates": candidates, "count": len(removed) if args.apply else len(candidates),
+                      "bytes": removed_bytes if args.apply else sum(candidate_bytes.values())},
                      ensure_ascii=False, indent=2))
     return 0
 
