@@ -1,4 +1,6 @@
-# Phase 5: checkpoint / resume
+# Phase 5: checkpoint / resume（設計・未実装）
+
+> この文書は設計段階である。現時点の`bin/agent-workflow`には`checkpoint`、`resume`、`checkpoint prune` commandはまだ実装されていない。実装PRが入るまで、下のcommandを実行してはいけない。
 
 ## 目的
 
@@ -31,17 +33,19 @@ directoryは`0700`、fileは`0600`を維持する。
 
 ```json
 {
+  "schema_version": 1,
   "task_id": "runner-001",
   "agent": "codex",
-  "workspace": "/home/aidabo/work/legacy",
+  "workspace": "${WORKSPACE}",
   "checkpoint_at": "2026-11-23T12:00:00+00:00",
   "phase": "coding",
   "task_status": "in_progress",
   "state": "busy",
   "goal": "runnerの構成を修正する",
   "repo": "aidabo/example",
-  "repo_dir": "/home/aidabo/work/legacy/example",
+  "repo_dir": "${WORKSPACE}/example",
   "branch": "feat/runner-config",
+  "head_sha": "0123456789abcdef0123456789abcdef01234567",
   "pr": 123,
   "test": {"status": "passed", "summary": "unit tests"},
   "next_action": "レビュー指摘の中2件を修正する",
@@ -49,11 +53,12 @@ directoryは`0700`、fileは`0600`を維持する。
 }
 ```
 
-秘密値、token、password、`.env`の内容は保存しない。referenceは許可されたpath名だけを保存する。
+秘密値、token、password、`.env`の内容は保存しない。`next_action`と`references`にも既存の`reject_secret`相当の検査を適用する。referencesは`context-and-references.md`のdeny-by-default方針を再利用し、workspace/repository相対pathだけを保存する。
 
 ## command設計
 
 ```bash
+# 実装後に有効
 bin/agent-workflow checkpoint \
   --workspace "$PWD" --agent codex --task-id runner-001 \
   --next-action "レビュー指摘を修正してtestする"
@@ -74,14 +79,48 @@ bin/agent-workflow resume --workspace "$PWD"
 
 初期版の`resume`は表示・prompt生成までとし、agent paneを自動再起動しない。重複実装や同じPRへの二重pushを防ぐためである。
 
-## 再起動後の運用
+resumeの出力例：
+
+```text
+RESUME CANDIDATE: runner-001
+phase=coding task_status=in_progress state=stale
+branch=feat/runner-config pr=123 head_sha=01234567
+last_test=passed: unit tests
+next_action=レビュー指摘の中2件を修正する
+warning=worktree has uncommitted changes; human confirmation required
+prompt=同じbranchの未完了作業から続けてください。新しいPRや重複pushは作らないでください。
+```
+
+## checkpointサイズとcleanup
+
+monitorにはtaskごとに次を表示する。
+
+```text
+checkpoint 12KB · 4m ago
+```
+
+checkpointの内容を毎回読み込まず、file sizeとmtimeだけを取得する。既定のwarning閾値は`512KB`とし、超過した場合は`checkpoint oversized`を表示する。checkpointには大きなログやdiffを保存せず、test logやPR URLなどの参照だけを保存する。
+
+初期実装ではtaskごとに最新checkpointを1件だけ保持する。履歴を保存する拡張を行う場合は、次の明示commandで削除する。
 
 ```bash
-cd /home/aidabo/work/legacy/11-agent-workflow
-export AGENT_WORKFLOW_WORKSPACE=/home/aidabo/work/legacy
+# 実装後に有効。まず削除対象だけ表示する
+bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --keep 3 --dry-run
 
-bin/agent-workflow agent
+# 内容を確認してから削除
+bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --keep 3
+```
+
+自動削除は行わない。done taskのcheckpointも、最初は人が確認してから削除する。
+
+## 再起動後の運用（実装後）
+
+```bash
+cd "${WORKSPACE}/11-agent-workflow"
+export AGENT_WORKFLOW_WORKSPACE="${WORKSPACE}"
+
 bin/agent-workflow resume --workspace "$AGENT_WORKFLOW_WORKSPACE"
+bin/agent-workflow agent
 bin/agent-workflow monitor
 ```
 
@@ -94,14 +133,18 @@ resume promptを確認してから、該当するagent paneへ次のように指
 
 ## 状態別の扱い
 
-| 状態 | resume時の扱い |
-|---|---|
-| `coding` / `test` | staleなら人が確認して再開 |
-| `code_review` | 現在のPR・最新head・inboxを確認 |
-| `needs_human` | 自動再開しない。人の指示を待つ |
-| `done` | resume対象外 |
-| branch消失 | warningを出して人の判断を待つ |
-| PRがclosed/merged | taskを自動変更せず、人に通知 |
+| phase | task_status | state | resume時の扱い |
+|---|---|---|---|
+| `docs` / `docs_review` | `planned` / `ready` / `in_progress` / `ready_for_review` | `busy` / `waiting_user` / `stale` | staleなら人が確認して再開 |
+| `docs_human_review` | `ready_for_review` | `waiting_user` / `needs_human` | 人の確認を待つ |
+| `assigned` / `coding` | `ready` / `in_progress` | `busy` / `stale` | branchと未commit変更を確認して再開 |
+| `test` | `in_progress` | `busy` / `blocked` / `stale` | test結果を確認して再開 |
+| `code_review` | `ready_for_review` | `busy` / `waiting_user` / `stale` | PR・最新head・inboxを確認 |
+| `code_human_review` | `ready_for_review` | `waiting_user` / `needs_human` | 人のmerge判断を待つ |
+| any | `needs_human` | `needs_human` / `blocked` / `stale` | 自動再開しない |
+| `done` | `done` | `done` | resume対象外 |
+
+branch消失、PRのclosed/merged、workspace不一致はphase/stateとは別の外部warningとして扱い、taskを自動変更しない。
 
 ## 将来の拡張
 
@@ -110,7 +153,7 @@ checkpoint/resumeが安定した後に、明示的な`--auto-resume`を検討す
 - 同じtaskを実行するagentがいない
 - branchとworkspaceが一致する
 - PRがopenである
-- 未commit変更を検出している
+- 未commit変更がない、またはcheckpoint時点との差分を人が確認済み
 - `needs_human`ではない
 - 人がauto-resumeを有効にしている
 
