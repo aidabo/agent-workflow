@@ -44,6 +44,30 @@ WORKFLOW=/home/aidabo/work/legacy/11-agent-workflow/bin/agent-workflow
 
 利用者が通常使う入口は`agent`と`monitor`の2つである。`agent`は設定確認後にtmux agentを起動し、`monitor`は監視画面を開く。`status`、`review`、`gate`、`observe`は個別操作やcron用の上級者向け入口として残している。
 
+## command一覧
+
+| command | 用途 | 使う場面 |
+|---|---|---|
+| `check` | `gh`、`python3`、`flock`、`REPOS`設定を検査する | 初回設定、cron切り分け |
+| `agent` | `check`後にtmuxのagent paneを起動する | 毎日の作業開始 |
+| `monitor` | agent/task/cross-reviewの監視画面を開く | 作業状況の確認 |
+| `status` | taskのbegin、heartbeat、test、context、endを操作する | agentがtask状態を更新するとき |
+| `review` | standalone cross-review wrapperを呼び出す | PRを手動でレビュー開始・履歴確認するとき |
+| `gate` | 1件のPRをdry-run判定する | 1件の`ELIGIBLE`/`BLOCKED`確認 |
+| `observe` | `automation:auto-merge`ラベル付きopen PRを一括観測する | cron、夜間のdry-run観測 |
+
+`agent`と`monitor`は利用者向けの主要commandである。`check`は破壊的操作をせず、設定不備なら非0で終了する。`gate`はexit `0`がELIGIBLE、exit `2`が通常のBLOCKED、その他がgate errorである。`observe`は通常のBLOCKEDでは成功終了し、GitHub一覧取得やgate自体のエラーがある場合だけ非0で終了する。
+
+詳細commandの例：
+
+```bash
+"$WORKFLOW" check
+"$WORKFLOW" status heartbeat --workspace "$PWD" --agent codex --task-id task-001
+"$WORKFLOW" review agent-workflow 123
+"$WORKFLOW" gate --repo=jibunsee-react --pr=123
+"$WORKFLOW" observe
+```
+
 ## auto-merge dry-run
 
 対象PRに明示的にラベルを付ける。
