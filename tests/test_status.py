@@ -78,6 +78,14 @@ class StatusTests(unittest.TestCase):
             checkpoint.write_text("not json")
             self.assertEqual(main(["checkpoint", *args, "--next-action", "recover"]), 0)
             self.assertEqual(json.loads(checkpoint.read_text())["next_action"], "recover")
+
+    def test_checkpoint_prune_is_dry_run_and_skips_active_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            result = main(["checkpoint-prune", "--workspace", tmp, "--older-than", "0s"])
+            self.assertEqual(result, 0)
+            self.assertTrue((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").exists())
     def test_begin_and_heartbeat_write_separate_atomic_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

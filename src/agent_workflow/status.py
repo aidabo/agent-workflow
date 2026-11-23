@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -319,6 +320,31 @@ def command_resume(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_checkpoint_prune(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    match = re.fullmatch(r"(\d+)([smhd])", args.older_than)
+    if not match:
+        raise ValueError("--older-than must look like 30d, 12h, 60m, or 30s")
+    amount, unit = int(match.group(1)), match.group(2)
+    seconds = amount * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    cutoff = datetime.now(timezone.utc).timestamp() - seconds
+    candidates = []
+    for path in sorted((root / "checkpoints").glob("*.json")):
+        if path.stat().st_mtime >= cutoff:
+            continue
+        task = read_json(root / "tasks" / path.name)
+        if isinstance(task, dict) and task.get("state") != "done":
+            continue
+        candidates.append(str(path))
+    if args.apply:
+        for name in candidates:
+            Path(name).unlink(missing_ok=True)
+    print(json.dumps({"dry_run": not args.apply, "removed": candidates if args.apply else [],
+                      "candidates": candidates}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -479,6 +505,11 @@ def main(argv: list[str] | None = None) -> int:
     resume.add_argument("--workspace", default=".")
     resume.add_argument("--state-root")
     resume.add_argument("--task-id")
+    prune = sub.add_parser("checkpoint-prune")
+    prune.add_argument("--workspace", default=".")
+    prune.add_argument("--state-root")
+    prune.add_argument("--older-than", required=True)
+    prune.add_argument("--apply", action="store_true")
     try:
         args = parser.parse_args(argv)
         if args.command == "context":
@@ -489,6 +520,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_checkpoint(args)
         if args.command == "resume":
             return command_resume(args)
+        if args.command == "checkpoint-prune":
+            return command_checkpoint_prune(args)
         return command_status(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"agent-status: {exc}", file=os.sys.stderr)

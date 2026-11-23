@@ -110,11 +110,14 @@ checkpoint 12KB · 4m ago
 
 checkpointの内容を毎回読み込まず、file sizeとmtimeだけを取得する。既定のwarning閾値は`512KB`とし、超過した場合は`checkpoint oversized`を表示する。checkpointには大きなログやdiffを保存せず、test logやPR URLなどの参照だけを保存する。
 
-初期実装ではtaskごとに最新checkpointを1件だけ保持する。checkpoint履歴の保存とprune commandは将来拡張であり、現時点では手動削除しない。
+初期実装ではtaskごとに最新checkpointを1件だけ保持する。古いcheckpointは、未完了taskを除外したdry-run結果を確認してから明示的に削除する。
 
 ```bash
-# 将来拡張の例（現時点では未実装）
-bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --keep 3 --dry-run
+# まず削除候補だけ表示
+bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d
+
+# 内容を確認してから削除
+bin/agent-workflow checkpoint prune --workspace "$WORKSPACE" --older-than 30d --apply
 ```
 
 自動削除は行わない。done taskのcheckpointも、最初は人が確認してから削除する。

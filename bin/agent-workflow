@@ -63,7 +63,13 @@ case "$command_name" in
   start) exec "$root/bin/agent-start" "$@" ;;
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
-  checkpoint) exec "$root/bin/agent-status" checkpoint "$@" ;;
+  checkpoint)
+    if [[ "${1:-}" == "prune" ]]; then
+      shift
+      exec "$root/bin/agent-status" checkpoint-prune "$@"
+    fi
+    exec "$root/bin/agent-status" checkpoint "$@"
+    ;;
   resume) exec "$root/bin/agent-status" resume "$@" ;;
   review) exec "$root/bin/cross-review" "$@" ;;
   gate) check_config gate; exec "$root/bin/agent-merge-gate" "$@" ;;
