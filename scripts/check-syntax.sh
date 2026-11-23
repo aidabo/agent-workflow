@@ -5,7 +5,7 @@ while IFS= read -r -d '' file; do
   bash -n "$file"
 done < <(find agent-notify cross-review scripts -type f -name '*.sh' -print0)
 
-for file in bin/agent-start bin/agent-monitor bin/cross-review bin/agent-merge-gate bin/agent-merge-observe; do
+for file in bin/agent-start bin/agent-monitor bin/cross-review bin/agent-merge-gate bin/agent-merge-observe bin/agent-workflow; do
   bash -n "$file"
 done
 

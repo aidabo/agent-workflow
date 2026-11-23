@@ -44,6 +44,7 @@ flowchart LR
 - [phase2-live-smoke.md](docs/phase2-live-smoke.md) — standalone monitorの一時tmux/workspace smoke
 - [behavior-lock.md](docs/behavior-lock.md) — copy manifest、old/new snapshot、parallel task検証
 - [auto-merge-gate.md](docs/auto-merge-gate.md) — 両レビュアー承認を判定するdry-run gate
+- [usage.md](docs/usage.md) — プロジェクトからagent workflowを起動する設定とcommand
 
 ## Copied runtime
 
@@ -51,10 +52,11 @@ flowchart LR
 直接使う入口は次のwrapperである。
 
 ```bash
-bin/agent-start       # tmux agentsを起動
+bin/agent-start       # tmux agentsを起動（内部入口）
 bin/agent-monitor     # monitorへ移動
 bin/agent-status      # task/heartbeat/status metadata
 bin/cross-review      # local cross-review
+bin/agent-workflow    # project-facing command router（通常は agent / monitor）
 ```
 
 `cross-review/config.local.sh`、inbox、review report、runtime state、secretは各環境で作る。
