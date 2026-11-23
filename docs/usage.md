@@ -59,6 +59,9 @@ REPOS=(
 | `review` | standalone cross-review wrapperを呼び出す | PRを手動でレビュー開始・履歴確認するとき |
 | `gate` | 1件のPRをdry-run判定する | 1件の`ELIGIBLE`/`BLOCKED`確認 |
 | `observe` | `automation:auto-merge`ラベル付きopen PRを一括観測する | cron、夜間のdry-run観測 |
+| `cron check` | cross-reviewとobserverのcron登録状態を確認する | 初回設定の確認 |
+| `cron install` | cross-review watchとobserverをcrontabへ登録する | 自動レビュー・夜間観測を有効化 |
+| `cron uninstall` | 上記cron登録を解除する | 自動実行を止める |
 
 `agent`と`monitor`は利用者向けの主要commandである。`check`は破壊的操作をせず、設定不備なら非0で終了する。`gate`はexit `0`がELIGIBLE、exit `2`が通常のBLOCKED、その他がgate errorである。`observe`は通常のBLOCKEDでは成功終了し、GitHub一覧取得やgate自体のエラーがある場合だけ非0で終了する。
 
@@ -70,6 +73,8 @@ REPOS=(
 "$WORKFLOW" review agent-workflow 123
 "$WORKFLOW" gate --repo=jibunsee-react --pr=123
 "$WORKFLOW" observe
+"$WORKFLOW" cron check
+"$WORKFLOW" cron install
 ```
 
 ## auto-merge dry-run
@@ -131,6 +136,14 @@ cross-reviewの自動レビューを有効にする場合は、configを編集�
 
 ```bash
 "$WORKFLOW_HOME/cross-review/install.sh" --uninstall
+```
+
+cross-review watchとmerge observerをまとめて管理する場合は、次のcommandを使う。
+
+```bash
+"$WORKFLOW" cron check
+"$WORKFLOW" cron install
+"$WORKFLOW" cron uninstall
 ```
 
 merge observerは別に登録する。

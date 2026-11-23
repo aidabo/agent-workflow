@@ -17,6 +17,7 @@ commands:
   review      review one PR: <repo-name> <pr-number>
   gate        dry-run one PR: --repo=<name> --pr=<number>
   observe     dry-run all open PRs with automation:auto-merge
+  cron        manage cron: cron check|install|uninstall
 EOF
 }
 
@@ -49,5 +50,21 @@ case "$command_name" in
   review) exec "$root/bin/cross-review" "$@" ;;
   gate) check_config; exec "$root/bin/agent-merge-gate" "$@" ;;
   observe) check_config; exec "$root/bin/agent-merge-observe" "$@" ;;
+  cron)
+    cron_action="${1:-check}"
+    case "$cron_action" in
+      install|check) check_config ;;
+      uninstall) ;;
+      *) echo "usage: bin/agent-workflow cron {check|install|uninstall}" >&2; exit 64 ;;
+    esac
+    if [[ "$cron_action" == "install" ]]; then
+      "$root/cross-review/install.sh"
+    elif [[ "$cron_action" == "check" ]]; then
+      "$root/cross-review/install.sh" --check
+    else
+      "$root/cross-review/install.sh" --uninstall
+    fi
+    exec "$root/scripts/agent-workflow-cron.sh" "$cron_action"
+    ;;
   *) echo "unknown command: $command_name" >&2; usage >&2; exit 64 ;;
 esac
