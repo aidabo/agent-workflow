@@ -16,11 +16,19 @@ source_manifest="$(mktemp)"
 target_manifest="$(mktemp)"
 trap 'rm -f "$source_manifest" "$target_manifest"' EXIT
 
-git -C "$source_root" ls-tree -r --name-only "$source_ref" -- agent-notify cross-review | sort >"$source_manifest"
-# cross-review/merge_gate.py is standalone workflow code, not a copied runtime
-# file. Keep it explicit so future copied files still fail closed on drift.
-git -C "$repo_root" ls-files -- agent-notify cross-review | \
-  grep -v '^cross-review/merge_gate\.py$' | sort >"$target_manifest"
+# Target-only files are explicitly allowlisted; copied runtime paths still have
+# to exist in both repositories. Keep the list tracked and minimal.
+standalone_paths="$(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$repo_root/scripts/standalone-runtime-paths.txt")"
+filter_standalone() {
+  while IFS= read -r path; do
+    grep -qxF "$path" <<<"$standalone_paths" || echo "$path"
+  done
+}
+git -C "$source_root" ls-tree -r --name-only "$source_ref" -- agent-notify cross-review | \
+  filter_standalone | sort >"$source_manifest"
+git -C "$repo_root" ls-files -- agent-notify cross-review | while IFS= read -r path; do
+  printf '%s\n' "$path"
+done | filter_standalone | sort >"$target_manifest"
 
 if ! diff -u "$source_manifest" "$target_manifest"; then
   echo "copy manifest differs" >&2

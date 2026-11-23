@@ -13,6 +13,7 @@ command -v crontab >/dev/null 2>&1 || {
   echo "crontab is not installed" >&2
   exit 2
 }
+mkdir -p -m 700 "$log_dir"
 
 current_crontab() { crontab -l 2>/dev/null || true; }
 

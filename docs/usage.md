@@ -19,8 +19,8 @@ cp cross-review/config.local.example.sh cross-review/config.local.sh
 
 ```bash
 REPOS=(
-  "jibunsee-react|aidabo/jibunsee-react|$HOME/work/legacy/01-ghost-front|$HOME/work/legacy/01-ghost-front-review"
-  "agent-workflow|aidabo/agent-workflow|$HOME/work/legacy/11-agent-workflow|$HOME/work/legacy/11-agent-workflow-review"
+  "jibunsee-react|aidabo/jibunsee-react|$HOME/work/legacy/01-ghost-front|$HOME/work/legacy/01-ghost-front-agent-workflow-review"
+  "agent-workflow|aidabo/agent-workflow|$HOME/work/legacy/11-agent-workflow|$HOME/work/legacy/11-agent-workflow-agent-workflow-review"
 )
 ```
 
@@ -132,7 +132,7 @@ cross-reviewの自動レビューを有効にする場合は、configを編集�
 "$WORKFLOW_HOME/cross-review/install.sh"
 ```
 
-このコマンドはcross-reviewのwatchを毎分登録し、既存crontabのバックアップを`$HOME/.cache/cross-review/`へ保存する。解除は次で行う。
+このコマンドはcross-reviewのwatchを毎分登録し、既存crontabのバックアップを`$HOME/.cache/agent-workflow/cross-review/`へ保存する。10-agent-toolsのcron行は変更しない。解除は次で行う。
 
 ```bash
 "$WORKFLOW_HOME/cross-review/install.sh" --uninstall
@@ -146,7 +146,7 @@ cross-review watchとmerge observerをまとめて管理する場合は、次の
 "$WORKFLOW" cron uninstall
 ```
 
-merge observerは別に登録する。
+`cron install`を使わず、merge observerだけを手動登録したい場合は次の行を使う。通常は`cron install`がwatchとobserverの両方を登録するため、この行を追加しない。
 
 ```cron
 */5 * * * * /path/to/11-agent-workflow/bin/agent-workflow observe >> $HOME/.cache/agent-workflow/observe.cron.log 2>&1

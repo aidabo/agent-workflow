@@ -6,7 +6,7 @@
 #   monitor.sh --detach    作るだけで移らない（start-agents.sh が使う）
 #
 # 作業用のセッションへは prefix + L（直前のセッション）で戻る。ボードは q で閉じる（セッションも消える）。
-# 環境変数: AGENTS_MONITOR_SESSION（既定 agents-monitor）
+# 環境変数: AGENTS_MONITOR_SESSION（既定 agent-workflow-monitor）
 set -euo pipefail
 
 detach=false
@@ -18,7 +18,7 @@ for arg in "$@"; do
 done
 
 script_dir="$(dirname "$(readlink -f "$0")")"
-session="${AGENTS_MONITOR_SESSION:-agents-monitor}"
+session="${AGENTS_MONITOR_SESSION:-agent-workflow-monitor}"
 workflow_workspace="${AGENT_WORKFLOW_WORKSPACE:-${AGENTS_PROJECT_ROOT:-$(pwd)}}"
 workflow_state_root="${AGENT_WORKFLOW_STATE_ROOT:-}"
 workflow_env="AGENT_WORKFLOW_WORKSPACE=$(printf '%q' "$workflow_workspace")"

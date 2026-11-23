@@ -5,7 +5,7 @@
 #                   [--no-test] [--no-post] [--force]
 #
 # 流れ: PR head をレビュー用 worktree に detach で展開 → スクリプトがテストを走らせる →
-#       作者以外のエージェントが読み取り専用でレビュー → <ワークスペース>/.agent-tools/reviews/ に保存 →
+#       作者以外のエージェントが読み取り専用でレビュー → <ワークスペース>/.agent-workflow/reviews/ に保存 →
 #       PR コメント（POST_COMMENT=1）→ 作者の inbox にポインタ + tmux の status 行に通知。
 # 他エージェントの pane に send-keys はしない（作業中の割り込みを避ける）。
 set -euo pipefail

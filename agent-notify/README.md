@@ -19,7 +19,7 @@ Repo-managed notification assets for tmux -> Discord stop notifications.
 - the hook-log monitor pane is off by default; `start-agents.sh --monitor` adds it back as an extra pane
 - an existing session with the expected pane count is re-attached; `--force` always starts a new one
 - workspaces: a workspace is a folder holding several repos (backend, frontend, …), like `~/work/legacy`. Put an `agents.yaml` at its root; `yarn agents` run from any repo inside it walks up, finds that file, starts the panes in the workspace root and keeps notify state in `<workspace>/.omx/notify-state`. Without one, it falls back to two levels above this script and the `agents.yaml` here
-- session name: first argument > `AGENTS_SESSION` > `session:` in `agents.yaml` > `<workspace folder>-agents`, so two workspaces can run side by side
+- session name: first argument > `AGENTS_SESSION` > `session:` in `agents.yaml` > `<workspace folder>-agent-workflow-agents`, so old and new runtimes can run side by side
 - overrides: `AGENTS_PROJECT_ROOT=/path` (workspace root), `AGENTS_YAML=/path/agents.yaml`
 - task monitor: `AGENT_WORKFLOW_WORKSPACE=/path` (workspace root; state is under
   `/path/.agent-workflow/state`), optionally
@@ -28,7 +28,7 @@ Repo-managed notification assets for tmux -> Discord stop notifications.
 
 ## Status board (`monitor.sh`, `status.py`)
 
-A separate tmux session, `agents-monitor`, shows the cross-review status and what each agent is doing — so the work panes stay clean and you look only when you want to. Detailed per-turn notifications go to Discord (stop-notify), not here.
+A separate tmux session, `agent-workflow-monitor`, shows the cross-review status and what each agent is doing — so the work panes stay clean and you look only when you want to. Detailed per-turn notifications go to Discord (stop-notify), not here. Set `AGENTS_MONITOR_SESSION` to override it.
 
 - one board for all workspaces: it lists every tmux session that has AI panes, and cross-review covers every repo in its config
 - `start-agents.sh` creates it in the background; `monitor.sh` (`yarn monitor` in a repo whose package.json has `"monitor": "bash <path to>/agent-notify/monitor.sh"`) creates it if missing and switches to it — inside tmux it switches the client, outside it attaches. `prefix + L` takes you back

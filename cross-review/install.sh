@@ -6,8 +6,8 @@
 #   install.sh --uninstall  cron の巡回を外す（レビュー結果・設定は残す）
 #
 # パスの設定は要らない: この install.sh の場所から watch.sh の場所を決める（どこに clone してもよい）。
-# cron の行は 1 本だけ。前の行（別の場所に clone していた分も）は消してから入れ直す。変える前の crontab は
-# ~/.cache/cross-review/crontab.bak.<日時> に残す。
+# このruntimeのmarker付き行と、このcloneの旧watch.sh行だけを更新する。10-agent-toolsなど別runtimeのcron行は触らない。
+# 変える前のcrontabは ~/.cache/agent-workflow/cross-review/crontab.bak.<日時> に残す。
 set -uo pipefail
 here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 mode="install"
@@ -25,13 +25,19 @@ warn() { echo "  ${Y}!${Z} $*"; problems=$((problems + 1)); }
 bad()  { echo "  ${R}✗${Z} $*"; problems=$((problems + 1)); }
 problems=0
 
-cache="$HOME/.cache/cross-review"
+cache="$HOME/.cache/agent-workflow/cross-review"
 log="$cache/watch.log"
+cron_marker="# agent-workflow-cross-review-watch"
+cron_path="${here/#$HOME/\$HOME}/watch.sh"
+cron_path_abs="$here/watch.sh"
 # $HOME の下なら "$HOME/..." と書く（cron の sh が展開する。ホームの場所が変わっても読みやすく、同じ行になる）
-cron_line="* * * * * ${here/#$HOME/\$HOME}/watch.sh >> \$HOME/.cache/cross-review/watch.log 2>&1"
+cron_line="* * * * * ${here/#$HOME/\$HOME}/watch.sh >> \$HOME/.cache/agent-workflow/cross-review/watch.log 2>&1 $cron_marker"
 
 # ── cron ─────────────────────────────────────────────────────
 current_crontab() { crontab -l 2>/dev/null || true; }
+without_own_cron() {
+  current_crontab | grep -vF "$cron_marker" | grep -vF "$cron_path" | grep -vF "$cron_path_abs" || true
+}
 write_crontab() {   # stdin → crontab（crontab <file> は長いパスを切り詰めるので stdin で渡す）
   mkdir -p "$cache"
   current_crontab > "$cache/crontab.bak.$(date +%Y%m%d%H%M%S)"
@@ -40,8 +46,8 @@ write_crontab() {   # stdin → crontab（crontab <file> は長いパスを切�
 
 if [[ "$mode" == "uninstall" ]]; then
   echo "${B}cross-review: uninstall${Z}"
-  if current_crontab | grep -q 'cross-review/watch\.sh'; then
-    current_crontab | grep -v 'cross-review/watch\.sh' | write_crontab && ok "cron の巡回を外しました（前の crontab は $cache/crontab.bak.* ）"
+  if current_crontab | grep -qF "$cron_marker" || current_crontab | grep -qF "$cron_path" || current_crontab | grep -qF "$cron_path_abs"; then
+    without_own_cron | write_crontab && ok "agent-workflowのcron巡回を外しました（前のcrontabは $cache/crontab.bak.* ）"
   else
     ok "cron に巡回は入っていません"
   fi
@@ -57,14 +63,16 @@ if ! command -v crontab >/dev/null 2>&1; then
 elif current_crontab | grep -qxF "$cron_line"; then
   ok "巡回は入っています: $cron_line"
 elif [[ "$mode" == "check" ]]; then
-  if current_crontab | grep -q 'cross-review/watch\.sh'; then
-    warn "巡回の行が古い／別の場所を指しています（install.sh で入れ直せます）: $(current_crontab | grep 'cross-review/watch\.sh')"
+  if current_crontab | grep -qF "$cron_marker"; then
+    warn "agent-workflowの巡回行が古い／別の場所を指しています（install.sh で入れ直せます）: $(current_crontab | grep -F "$cron_marker")"
+  elif current_crontab | grep -qF "$cron_path" || current_crontab | grep -qF "$cron_path_abs"; then
+    warn "markerなしの旧agent-workflow巡回行があります（install.shで入れ直せます）: $(current_crontab | grep -F "$cron_path" || current_crontab | grep -F "$cron_path_abs")"
   else
     warn "巡回が入っていません（install.sh で入ります）"
   fi
 else
   mkdir -p "$cache"
-  { current_crontab | grep -v 'cross-review/watch\.sh'; echo "$cron_line"; } | write_crontab \
+  { without_own_cron; echo "$cron_line"; } | write_crontab \
     && ok "巡回を入れました（毎分）: $cron_line" || bad "crontab に書けませんでした"
 fi
 if pgrep -x cron >/dev/null 2>&1 || pgrep -x crond >/dev/null 2>&1; then

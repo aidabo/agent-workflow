@@ -44,6 +44,7 @@ flowchart LR
 - [phase2-live-smoke.md](docs/phase2-live-smoke.md) — standalone monitorの一時tmux/workspace smoke
 - [behavior-lock.md](docs/behavior-lock.md) — copy manifest、old/new snapshot、parallel task検証
 - [auto-merge-gate.md](docs/auto-merge-gate.md) — 両レビュアー承認を判定するdry-run gate
+- [storage-separation.md](docs/storage-separation.md) — 10-agent-toolsと11-agent-workflowの保存領域・切り戻し
 - [usage.md](docs/usage.md) — プロジェクトからagent workflowを起動する設定とcommand
 
 ## Copied runtime

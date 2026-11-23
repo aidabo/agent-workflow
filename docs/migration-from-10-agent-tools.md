@@ -84,7 +84,7 @@ target-only差分をtracked file listで比較し、差分が無いことを確�
 - 既存`Makefile`の`make test`を拡張し、shell/node/python syntax checkも追加
 - `git -C ../10-agent-tools ls-files`とcopy manifestを比較するinventory checkを追加
 - 同じfixture PR/inboxで、旧status/monitorと新status/monitorのsnapshotを比較するbehavior lockを実行
-- 段階1では新repositoryの`cross-review/install.sh`を実行しない。cron切替は段階3だけで行う
+- 分離PRを適用するまでは新repositoryの`cross-review/install.sh`を実行しない。分離後のcron切替はcanary確認後に行う
 
 ### 2. task/status統合
 
@@ -97,7 +97,7 @@ target-only差分をtracked file listで比較し、差分が無いことを確�
 - package.jsonの`agents`/`monitor` commandを新repositoryへ向ける
 - cross-reviewのrepo entryを新repositoryのpathへ変更
 - tmuxを再起動し、全paneのidentityとmonitor表示を確認
-- 旧repositoryは停止したままrollback用にread-only保持
+- 旧repositoryのcronを停止し、rollback用にread-only保持
 
 ### 4. 旧repositoryのarchive
 

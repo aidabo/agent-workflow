@@ -61,4 +61,4 @@
   main の上で commit すると、PR がマージされたあともユーザーの `git pull` が早送りできず、手元だけのマージが毎回できる。
   ユーザーの main がGitHubと分かれているのに気づいたら自分でresetせず、`git log origin/main..main`と
   `git diff --stat origin/main main`の結果を見せてユーザーに決めてもらう。
-- レビュー結果のファイル（`<ワークスペース>/.agent-tools/reviews/`）を書き換えない。
+- レビュー結果のファイル（`<ワークスペース>/.agent-workflow/reviews/`）を書き換えない。

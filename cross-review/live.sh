@@ -15,4 +15,4 @@ for entry in "${REPOS[@]}"; do
   wts+="$name|$wt"$'\n'
 done
 
-CR_WTS="$wts" CR_LOG="${CROSS_REVIEW_LOG:-$HOME/.cache/cross-review/watch.log}" exec python3 "$here/live.py"
+CR_WTS="$wts" CR_LOG="${CROSS_REVIEW_LOG:-$HOME/.cache/agent-workflow/cross-review/watch.log}" exec python3 "$here/live.py"

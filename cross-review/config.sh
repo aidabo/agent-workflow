@@ -9,7 +9,7 @@ CROSS_REVIEW_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd
 # レビュー結果の置き場（人が読む・作者エージェントに渡すファイル）。空なら report_dir_for がリポジトリごとに決める。
 REPORT_DIR=""
 # 同じ PR head × レビュアーを二度レビューしないための記録
-STATE_DIR="$HOME/.cache/cross-review/state"
+STATE_DIR="${CROSS_REVIEW_STATE_DIR:-$HOME/.cache/agent-workflow/cross-review/state}"
 # 作者エージェントへの受け渡し箱（inbox/<agent>/ にレビューへのポインタを置く）
 INBOX_DIR="$CROSS_REVIEW_HOME/inbox"
 
@@ -61,15 +61,16 @@ DEEPSEEK_LAUNCHER="${DEEPSEEK_LAUNCHER:-}"
 EXTRA_PATH=""
 
 # レビュー結果の置き場: REPORT_DIR があればそれ。無ければリポジトリのワークスペース（作業ツリーから上へたどって
-# agents.yaml がある所、例 ~/work/legacy）の .agent-tools/reviews/。どれでもなければ ~/.cache/cross-review/reports。
+# agents.yaml がある所、例 ~/work/legacy）の .agent-workflow/reviews/。どれでもなければ
+# ~/.cache/agent-workflow/cross-review/reports。
 report_dir_for() {  # <作者の作業ツリー>
   if [[ -n "$REPORT_DIR" ]]; then echo "$REPORT_DIR"; return; fi
   local d="$1"
   while [[ -n "$d" && "$d" != "/" && "$d" != "." ]]; do
-    if [[ -f "$d/agents.yaml" ]]; then echo "$d/.agent-tools/reviews"; return; fi
+    if [[ -f "$d/agents.yaml" ]]; then echo "$d/.agent-workflow/reviews"; return; fi
     d="$(dirname "$d")"
   done
-  echo "$HOME/.cache/cross-review/reports"
+  echo "$HOME/.cache/agent-workflow/cross-review/reports"
 }
 
 _cross_review_local="${CROSS_REVIEW_CONFIG:-$CROSS_REVIEW_HOME/config.local.sh}"

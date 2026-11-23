@@ -122,7 +122,7 @@ class LogFilter:
 
 
 def main() -> int:
-    log = Path(os.environ.get("CR_LOG", str(Path.home() / ".cache/cross-review/watch.log")))
+    log = Path(os.environ.get("CR_LOG", str(Path.home() / ".cache/agent-workflow/cross-review/watch.log")))
     wts = [l.split("|", 1) for l in os.environ.get("CR_WTS", "").splitlines() if "|" in l]
 
     print(f"{BOLD}review — live{RESET}  {DIM}(each cron pass and every step of a running review){RESET}", flush=True)
