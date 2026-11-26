@@ -92,11 +92,11 @@ def is_assignment_pending(record: dict) -> bool:
         return True
     if str(record.get("assignment") or "").lower() in {"pending", "unassigned"}:
         return True
-    return "task assignment pending" in short_text(record.get("goal"), 128).lower()
+    return "task assignment pending" in task_summary(record, 128).lower()
 
 
 def task_summary(record: dict, limit: int = 48) -> str:
-    for key in ("summary", "current_work", "description", "goal"):
+    for key in ("summary", "current_work", "description", "goal", "next_action", "task_id"):
         value = short_text(record.get(key), limit)
         if value:
             return value
@@ -149,9 +149,9 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
         width = shutil.get_terminal_size((120, 24)).columns
         line = truncate_display(line, max(1, width))
         lines.append(line)
+    if not visible:
+        return [f"  現在の作業taskなし（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業taskなし"]
     omitted = len(active) + len(completed) - len(visible)
     if omitted:
         lines.append(f"  … 他 {omitted} task")
-    if not lines:
-        return [f"  現在の作業taskなし（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業taskなし"]
     return lines

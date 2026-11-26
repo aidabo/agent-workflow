@@ -25,7 +25,6 @@ import subprocess
 import sys
 import termios
 import threading
-import time
 import tty
 import unicodedata
 from datetime import datetime
@@ -33,7 +32,7 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, is_assignment_pending, short_text, task_records, task_summary, truncate_display
+from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, is_assignment_pending, task_records, task_summary, truncate_display
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"

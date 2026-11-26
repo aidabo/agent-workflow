@@ -84,6 +84,18 @@ class MonitorDataTests(unittest.TestCase):
             self.assertIn("割当待ち 1件", lines[0])
             self.assertNotIn("pending idle", lines[0])
 
+    def test_assignment_pending_tasks_are_not_omitted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            for name in ("one", "two"):
+                (root / "tasks" / f"{name}.json").write_text(json.dumps({
+                    "task_id": name, "state": "idle", "placeholder": True,
+                }))
+            line = format_task_lines(root)[0]
+            self.assertIn("割当待ち 2件", line)
+            self.assertNotIn("他 ", line)
+
     def test_task_context_strips_control_characters(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
