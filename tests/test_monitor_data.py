@@ -81,7 +81,7 @@ class MonitorDataTests(unittest.TestCase):
                 "goal": "task assignment pending",
             }))
             lines = format_task_lines(root)
-            self.assertIn("割当待ち 1件", lines[0])
+            self.assertIn("現在の作業task未登録（agentの割当待ち 1件）", lines[0])
             self.assertNotIn("pending idle", lines[0])
 
     def test_assignment_pending_tasks_are_not_omitted(self):

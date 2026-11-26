@@ -106,7 +106,7 @@ def task_summary(record: dict, limit: int = 48) -> str:
 def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
     records = records if records is not None else task_records(root)
     if not records:
-        return ["  現在の作業taskなし"]
+        return ["  現在の作業task未登録（stateなし）"]
     pending = [record for record in records if record.get("state") != "done" and is_assignment_pending(record)]
     active = [record for record in records if record.get("state") != "done" and not is_assignment_pending(record)]
     completed = [record for record in records if record.get("state") == "done" and not is_assignment_pending(record)]
@@ -150,7 +150,7 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
         line = truncate_display(line, max(1, width))
         lines.append(line)
     if not visible:
-        return [f"  現在の作業taskなし（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業taskなし"]
+        return [f"  現在の作業task未登録（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業task未登録"]
     omitted = len(active) + len(completed) - len(visible)
     if omitted:
         lines.append(f"  … 他 {omitted} task")

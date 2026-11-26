@@ -40,6 +40,9 @@ agent行には、同じagentのpaneが1つで、`state/agents/<agent>.json`の`c
 指す未完了・staleでないtaskがある場合に、そのtaskの`goal`または`next_action`を短く表示する。
 複数paneやcurrent taskが無い場合は誤表示を避けるため文脈を表示しない。
 
+タスク欄の`現在の作業task未登録`は、paneの作業内容を推測していない状態を示す。
+手動作業の内容を表示するには、task stateを登録し、agent indexの`current_task_id`を更新する。
+
 取得失敗は`unknown`と表示し、推測で`done`にしない。GitHub APIが遅くてもpane stateの更新を
 止めない。
 
