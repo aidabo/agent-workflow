@@ -168,23 +168,22 @@ revision taskには次を残す。
 既存の`phase / state / task_status`の3軸を維持する。
 
 ```text
-plan draft
-  → plan review
-  → plan approved
-  → task planned
-  → task assigned: phase=assigned / task_status=ready / state=idle
+plan draft / plan review / plan approved are plan.status values, not task phases.
+  → task planned: phase=docs / task_status=ready / state=idle
+  → task assigned: phase=assigned / task_status=in_progress / state=busy
   → task running:  phase=coding / task_status=in_progress / state=busy
   → task evidence: phase=test / task_status=in_progress / state=busy
   → code review:   phase=code_review / task_status=ready_for_review / state=waiting_user
-  → verification: 実装の動作・受入条件を確認
+  → verification: phase=test / task_status=in_progress / state=busy; agentがevidenceを記録
       ├─ pass: phase=code_human_review / task_status=ready_for_review / state=waiting_user
       │          → 人がmerge → phase=done / task_status=done / state=done
       └─ fail: revision taskへ戻る
 ```
 
-assignなしの`begin`は既存利用者との互換性のためcurrent taskへ設定できる。assign済みの別taskを
-beginする場合は、明示assignを要求する。別taskのheartbeat/updateはcurrent taskを上書きしない。
-これは現行status実装からの変更であり、Phase 3で`status.py`と既存テストを更新する。
+pipeline管理task（`pipeline_managed=true`）は、人のassign承認なしに`begin`できない。assign済みの
+別taskをbeginする場合も、明示assignを要求する。legacy task（このflagがない既存task）は互換性の
+ためassignなしbeginを許可し、current taskへ設定する。別taskのheartbeat/updateはcurrent taskを
+上書きしない。これは現行status実装からの変更であり、Phase 3で`status.py`と既存テストを更新する。
 
 ## 8. 実装フェーズ
 
@@ -215,7 +214,7 @@ beginする場合は、明示assignを要求する。別taskのheartbeat/update�
 - current taskの一意表示
 - paneへのtask context通知
 - task evidenceとacceptance criteriaの記録
-- assignなしbeginの互換規則、別task heartbeatによるcurrent task上書き禁止、既存テスト更新
+- pipeline taskのassign必須、legacy taskのassignなしbegin互換、別task heartbeatによるcurrent task上書き禁止、既存テスト更新
 
 ### Phase 4: Revision loop
 
