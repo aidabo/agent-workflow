@@ -33,7 +33,7 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import display_width, format_task_lines, short_text, task_records, truncate_display
+from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, short_text, task_records, truncate_display
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
@@ -143,14 +143,11 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
     """One line per session: "ThinkAI-Agents  1.1 deepseek 待機 · 1.3 codex 作業中"."""
     me = current_session()
     children = process_children()
-    task_by_agent: dict[str, list[str]] = {}
-    for task in records if records is not None else task_records():
-        if task.get("state") in {"done", "stale"}:
-            continue
-        agent = str(task.get("agent") or "")
-        context = task.get("goal") or task.get("next_action") or task.get("task_id")
-        if agent and context:
-            task_by_agent.setdefault(agent, []).append(short_text(context, 42))
+    current_tasks = agent_current_tasks(records=records)
+    task_by_agent = {
+        agent: [short_text(task.get("goal") or task.get("next_action") or task.get("task_id"), 42)]
+        for agent, task in current_tasks.items()
+    }
     fmt = "#{session_name}\t#{window_index}.#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_title}"
     sessions: dict[str, list[str]] = {}
     pane_count: dict[str, int] = {}
