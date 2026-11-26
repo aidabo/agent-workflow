@@ -57,7 +57,7 @@ class MonitorDataTests(unittest.TestCase):
             (root / "tasks/task.json").write_text(json.dumps({
                 "task_id": "task", "state": "busy", "test": {"status": None, "summary": "running"}
             }))
-            self.assertIn("test=-", format_task_lines(root)[0])
+            self.assertNotIn("test=-", format_task_lines(root)[0])
 
     def test_task_goal_and_next_action_are_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -95,7 +95,7 @@ class MonitorDataTests(unittest.TestCase):
                 line = format_task_lines(root)[0]
             self.assertLessEqual(display_width(line), 20)
 
-    def test_long_task_id_keeps_checkpoint_summary(self):
+    def test_long_task_id_is_displayed_without_checkpoint_internals(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
             (root / "tasks").mkdir(parents=True)
@@ -105,7 +105,7 @@ class MonitorDataTests(unittest.TestCase):
                 "task_id": task_id, "state": "busy",
             }))
             (root / "checkpoints" / f"{task_id}.json").write_text("checkpoint")
-            self.assertIn("cp=10B", format_task_lines(root)[0])
+            self.assertNotIn("cp=", format_task_lines(root)[0])
 
     def test_agent_current_task_index_wins_over_task_update_order(self):
         with tempfile.TemporaryDirectory() as tmp:
