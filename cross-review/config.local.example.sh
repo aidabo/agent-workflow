@@ -5,6 +5,13 @@
 # 1 か所に固定したいときだけ書く。
 # REPORT_DIR="$HOME/work/reviews/cross"
 
+# 旧10-agent-toolsの完了履歴をMERGED/CLOSED表示にだけ使う読み取り専用fallback。
+# 未指定なら、各REPOSのworkspace（agents.yamlと.agent-tools/reviewsがある場所）を個別に自動検出する。
+# 移行完了後に旧履歴を表示しない場合は LEGACY_FALLBACK=0 にする。
+# LEGACY_STATE_DIR="$HOME/.cache/cross-review/state"
+# LEGACY_REPORT_DIR="$HOME/work/legacy/.agent-tools/reviews"
+# LEGACY_FALLBACK=0
+
 # 対象リポジトリ: 名前|GitHub repo|作者の作業ツリー|レビュー用 worktree（作業ツリーの隣に作られる）
 # ワークスペース（~/work/legacy のように複数リポジトリをまとめたフォルダ）が複数あっても、ここ 1 か所に並べる。
 REPOS=(

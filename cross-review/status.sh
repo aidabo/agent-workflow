@@ -19,7 +19,22 @@ if [[ ${#args[@]} -eq 2 ]]; then export CR_HISTORY="${args[0]}|${args[1]}"; fi
 repos=""
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name gh_repo src wt <<<"$entry"
-  repos+="$name|$gh_repo|$wt|$(report_dir_for "$src")"$'\n'
+  if [[ "${LEGACY_FALLBACK:-1}" == 0 ]]; then
+    legacy_report_dir=""
+  else
+    legacy_report_dir="${LEGACY_REPORT_DIR:-}"
+  fi
+  if [[ "${LEGACY_FALLBACK:-1}" != 0 && -z "$legacy_report_dir" ]]; then
+    d="$src"
+    while [[ -n "$d" && "$d" != "/" && "$d" != "." ]]; do
+      if [[ -f "$d/agents.yaml" && -d "$d/.agent-tools/reviews" ]]; then
+        legacy_report_dir="$d/.agent-tools/reviews"
+        break
+      fi
+      d="$(dirname "$d")"
+    done
+  fi
+  repos+="$name|$gh_repo|$wt|$(report_dir_for "$src")|$legacy_report_dir"$'\n'
 done
 
 # 巡回（cron の watch.sh）
@@ -35,6 +50,9 @@ else
   cron_line="${R}cron: watch.sh is not in crontab (README「定期実行」)${Z}"
 fi
 
+legacy_state_dir="$LEGACY_STATE_DIR"
+[[ "${LEGACY_FALLBACK:-1}" == 0 ]] && legacy_state_dir=""
 CR_REPOS="$repos" CR_STATE_DIR="$STATE_DIR" CR_INBOX_DIR="$INBOX_DIR" \
+  CR_LEGACY_STATE_DIR="$legacy_state_dir" CR_LEGACY_REPORT_DIR="" \
 CR_TRUSTED="${TRUSTED_AUTHORS:-}" CR_CRON_LINE="$cron_line" \
   exec python3 "$here/status.py"
