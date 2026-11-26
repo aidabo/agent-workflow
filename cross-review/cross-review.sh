@@ -44,7 +44,17 @@ mkdir -p "$REPORT_DIR" "$STATE_DIR" "$INBOX_DIR"
 # PRごとにworktreeとlockを分け、同じリポジトリの独立したPRは並列にレビューする。
 # 同じPRの重複起動だけはこのlockで直列化する。
 exec 9>"$STATE_DIR/$repo_name-$pr.lock"
-flock 9
+flock -n 9 || { log "PR #$pr ($repo_name): already running"; exit 0; }
+# The watcher is intentionally short-lived. Reserve a bounded global slot only
+# after this PR is known to need a review, so skipped PRs cannot starve new work.
+slot_fd=""
+release_slot() {
+  if [[ -n "$slot_fd" ]]; then
+    flock -u "$slot_fd" 2>/dev/null || true
+    eval "exec ${slot_fd}>&-" 2>/dev/null || true
+  fi
+}
+trap release_slot EXIT
 # Gitの管理領域（FETCH_HEAD / .git/worktrees）は同一repoで共有するため、短時間だけ直列化する。
 exec 7>"$STATE_DIR/$repo_name.git.lock"
 
@@ -149,6 +159,20 @@ if [[ "$force" == 0 && ${#reviewed_heads[@]} -ge "$MAX_ROUNDS" ]]; then
 fi
 prev_short="${reviewed_heads[0]:-}"     # 一番新しくレビューした head（再レビューの起点）
 
+max_parallel="${MAX_PARALLEL_REVIEWS:-4}"
+[[ "$max_parallel" =~ ^[1-9][0-9]*$ ]] || max_parallel=4
+mkdir -p "$STATE_DIR/slots"
+for ((slot = 0; slot < max_parallel; slot++)); do
+  candidate_fd=$((20 + slot))
+  eval "exec ${candidate_fd}>\"$STATE_DIR/slots/review-${slot}.lock\""
+  if flock -n "$candidate_fd"; then
+    slot_fd="$candidate_fd"
+    break
+  fi
+  eval "exec ${candidate_fd}>&-"
+done
+[[ -n "$slot_fd" ]] || { log "PR #$pr ($repo_name): review slots full; next cron pass will retry"; exit 0; }
+
 # ── レビュー用 worktree（detach、作者のツリーは動かさない）──────────
 review_wt="${wt}-pr${pr}"
 cleanup_review_worktree() {
@@ -156,7 +180,11 @@ cleanup_review_worktree() {
   git -C "$src" worktree remove --force "$review_wt" >/dev/null 2>&1 || true
   flock -u 7
 }
-trap cleanup_review_worktree EXIT
+cleanup_all() {
+  cleanup_review_worktree
+  release_slot
+}
+trap cleanup_all EXIT
 flock 7
 set +e
 git -C "$src" fetch -q origin "$head_sha" "$base_ref" 2>/dev/null || git -C "$src" fetch -q origin

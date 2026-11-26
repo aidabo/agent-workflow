@@ -456,7 +456,7 @@ def main() -> int:
     counts = {k: sum(1 for i in open_items if i["key"] == k) for k in OPEN_ORDER}
     summary = " · ".join(f"{STATES[k][1]}{counts[k]} {STATES[k][0].lower()}{RESET}"
                          for k in OPEN_ORDER if counts[k] and k != "skipped")
-    print(f"{BOLD}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}")
+    print(f"{BOLD}{CYAN}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}")
     if not repos:
         print(f"  {YELLOW}対象リポジトリがありません（config.local.sh の REPOS）{RESET}")
     print(*errors, sep="\n") if errors else None

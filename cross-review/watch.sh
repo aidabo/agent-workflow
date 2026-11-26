@@ -15,37 +15,16 @@ mkdir -p "$STATE_DIR"
 exec 8>"$STATE_DIR/watch.lock"
 flock -n 8 || { echo "[watch] another pass is running"; exit 0; }
 
-pids=()
-labels=()
-max_parallel="${MAX_PARALLEL_REVIEWS:-4}"
-[[ "$max_parallel" =~ ^[1-9][0-9]*$ ]] || max_parallel=4
-wait_batch() {
-  local i failed=0
-  for i in "${!pids[@]}"; do
-    if ! wait "${pids[$i]}"; then
-      echo "[watch] ${labels[$i]} failed" >&2
-      failed=1
-    fi
-  done
-  pids=()
-  labels=()
-  return "$failed"
-}
-
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name gh_repo _ _ <<<"$entry"
   while read -r pr; do
-    "$here/cross-review.sh" "$name" "$pr" &
-    pids+=("$!")
-    labels+=("$name #$pr")
-    while [[ ${#pids[@]} -ge "$max_parallel" ]]; do
-      wait_batch || true
-    done
+    # Do not keep watch.lock until the AI reviewers finish. cross-review.sh owns
+    # the per-PR lock and bounded global review slots; the next cron pass can
+    # therefore discover newly opened PRs immediately.
+    "$here/cross-review.sh" "$name" "$pr" 8>&- &
   done < <(gh pr list -R "$gh_repo" --state open --json number,isDraft,labels \
     -q '.[] | select(.isDraft|not) | select([.labels[].name] | index("no-cross-review") | not) | .number' 2>/dev/null)
 done
-
-wait_batch || true
 
 # 未通知のレビューを、手すきのエージェントに届ける（前の巡回で作業中だった分も）
 "$here/notify.sh" || true

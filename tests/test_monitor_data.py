@@ -1,13 +1,15 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agent_workflow.monitor_data import format_task_lines, task_records
+from agent_workflow.monitor_data import display_width, format_task_lines, task_records
 
 
 class MonitorDataTests(unittest.TestCase):
@@ -56,6 +58,42 @@ class MonitorDataTests(unittest.TestCase):
                 "task_id": "task", "state": "busy", "test": {"status": None, "summary": "running"}
             }))
             self.assertIn("test=-", format_task_lines(root)[0])
+
+    def test_task_goal_and_next_action_are_visible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "agent": "codex", "phase": "coding", "state": "busy",
+                "goal": "parallel review queue",
+                "next_action": "run monitor checks",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("目的=parallel review queue", line)
+            self.assertIn("次=run monitor checks", line)
+
+    def test_task_context_strips_control_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "goal": "safe\u001b[2J context",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("目的=safe[2J context", line)
+            self.assertNotIn("\x1b", line)
+
+    def test_task_lines_use_terminal_display_width(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "goal": "日本語の長いタスク内容",
+                "error": True,
+            }))
+            with patch("agent_workflow.monitor_data.shutil.get_terminal_size", return_value=os.terminal_size((20, 24))):
+                line = format_task_lines(root)[0]
+            self.assertLessEqual(display_width(line), 20)
 
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:

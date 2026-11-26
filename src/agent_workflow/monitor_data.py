@@ -3,10 +3,37 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
+import unicodedata
 from pathlib import Path
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def short_text(value: object, limit: int = 64) -> str:
+    text = CONTROL_CHARS.sub("", str(value or ""))
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def display_width(text: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(char) in "WF" else 1 for char in text)
+
+
+def truncate_display(text: str, limit: int) -> str:
+    if display_width(text) <= limit:
+        return text
+    out: list[str] = []
+    used = 0
+    for char in text:
+        char_width = 2 if unicodedata.east_asian_width(char) in "WF" else 1
+        if used + char_width > max(0, limit - 1):
+            break
+        out.append(char)
+        used += char_width
+    return "".join(out) + "…"
 
 
 def state_root() -> Path:
@@ -34,8 +61,8 @@ def task_records(root: Path | None = None) -> list[dict]:
     return sorted(records, key=lambda item: (item.get("updated_at", ""), item.get("task_id", "")), reverse=True)
 
 
-def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
-    records = task_records(root)
+def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
+    records = records if records is not None else task_records(root)
     if not records:
         return ["  タスク状態ファイルなし"]
     active = [record for record in records if record.get("state") != "done"]
@@ -68,8 +95,16 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
             f"test={test_status} PR={pr} hb={record.get('heartbeat_at', '-')}"
             f"{checkpoint_info}"
         )
+        goal = short_text(record.get("goal"), 48)
+        next_action = short_text(record.get("next_action"), 48)
+        if goal:
+            line += f" 目的={goal}"
+        if next_action and next_action != goal:
+            line += f" 次={next_action}"
         if record.get("error"):
             line += " ERROR"
+        width = shutil.get_terminal_size((120, 24)).columns
+        line = truncate_display(line, max(1, width))
         lines.append(line)
     omitted = len(records) - len(visible)
     if omitted:
