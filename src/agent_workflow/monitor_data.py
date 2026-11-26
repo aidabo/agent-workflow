@@ -61,6 +61,25 @@ def task_records(root: Path | None = None) -> list[dict]:
     return sorted(records, key=lambda item: (item.get("updated_at", ""), item.get("task_id", "")), reverse=True)
 
 
+def agent_current_tasks(root: Path | None = None, records: list[dict] | None = None) -> dict[str, dict]:
+    """Resolve each agent's indexed current task from one state snapshot."""
+    base = root or state_root()
+    records = records if records is not None else task_records(base)
+    by_id = {record.get("task_id"): record for record in records if record.get("task_id")}
+    current: dict[str, dict] = {}
+    for path in sorted((base / "agents").glob("*.json")):
+        try:
+            index = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        agent = str(index.get("agent") or path.stem)
+        task_id = index.get("current_task_id")
+        record = by_id.get(task_id)
+        if record and record.get("state") not in {"done", "stale"}:
+            current[agent] = record
+    return current
+
+
 def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
     records = records if records is not None else task_records(root)
     if not records:

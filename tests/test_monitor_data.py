@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agent_workflow.monitor_data import display_width, format_task_lines, task_records
+from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, task_records
 
 
 class MonitorDataTests(unittest.TestCase):
@@ -106,6 +106,17 @@ class MonitorDataTests(unittest.TestCase):
             }))
             (root / "checkpoints" / f"{task_id}.json").write_text("checkpoint")
             self.assertIn("cp=10B", format_task_lines(root)[0])
+
+    def test_agent_current_task_index_wins_over_task_update_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "agents").mkdir(parents=True)
+            (root / "tasks/old.json").write_text(json.dumps({"task_id": "old", "agent": "codex", "state": "busy", "updated_at": "2025-02-02"}))
+            (root / "tasks/current.json").write_text(json.dumps({"task_id": "current", "agent": "codex", "state": "busy", "updated_at": "2025-01-01"}))
+            (root / "agents/codex.json").write_text(json.dumps({"agent": "codex", "current_task_id": "current"}))
+            current = agent_current_tasks(root)
+            self.assertEqual(current["codex"]["task_id"], "current")
 
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
