@@ -17,9 +17,20 @@ args=(); for a in "$@"; do [[ "$a" == --* ]] || args+=("$a"); done
 if [[ ${#args[@]} -eq 2 ]]; then export CR_HISTORY="${args[0]}|${args[1]}"; fi
 
 repos=""
+legacy_report_dir="${LEGACY_REPORT_DIR:-}"
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name gh_repo src wt <<<"$entry"
   repos+="$name|$gh_repo|$wt|$(report_dir_for "$src")"$'\n'
+  if [[ -z "$legacy_report_dir" ]]; then
+    d="$src"
+    while [[ -n "$d" && "$d" != "/" && "$d" != "." ]]; do
+      if [[ -f "$d/agents.yaml" && -d "$d/.agent-tools/reviews" ]]; then
+        legacy_report_dir="$d/.agent-tools/reviews"
+        break
+      fi
+      d="$(dirname "$d")"
+    done
+  fi
 done
 
 # 巡回（cron の watch.sh）
@@ -36,5 +47,6 @@ else
 fi
 
 CR_REPOS="$repos" CR_STATE_DIR="$STATE_DIR" CR_INBOX_DIR="$INBOX_DIR" \
+  CR_LEGACY_STATE_DIR="$LEGACY_STATE_DIR" CR_LEGACY_REPORT_DIR="$legacy_report_dir" \
 CR_TRUSTED="${TRUSTED_AUTHORS:-}" CR_CRON_LINE="$cron_line" \
   exec python3 "$here/status.py"

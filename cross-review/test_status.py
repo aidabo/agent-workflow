@@ -136,6 +136,24 @@ class Classify(unittest.TestCase):
         self.assertIn("active", note)
         self.assertIn("deepseek waiting", note)
 
+    def test_merged_rows_fall_back_to_legacy_review_history(self):
+        legacy_state = Path(self.tmp.name) / "legacy-state"
+        legacy_reports = Path(self.tmp.name) / "legacy-reports"
+        legacy_state.mkdir()
+        legacy_reports.mkdir()
+        (legacy_state / "x-9-aaaaaaaa-codex.done").touch()
+        (legacy_reports / "x-pr9-aaaaaaaa-codex.md").write_text(
+            "- head: `aaaaaaaa` / author: claude / reviewed: now\n"
+            "- tests: - exit=0: yarn test\n\n## 判定\nAPPROVE\n",
+            encoding="utf-8",
+        )
+        self.cfg.update(legacy_state_dir=str(legacy_state), legacy_report_dir=str(legacy_reports))
+        pr = {"number": 9, "title": "t", "state": "MERGED", "headRefOid": "aaaaaaaa00",
+              "mergedAt": "", "labels": [{"name": "author:claude"}], "author": {"login": "me"}}
+        item = S.classify(pr, self.cfg, set())
+        line = PLAIN.sub("", S.render_line(item, 4))
+        self.assertIn("codex ✓ tests✓", line)
+
 
 if __name__ == "__main__":
     unittest.main()

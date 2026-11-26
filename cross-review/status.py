@@ -266,6 +266,18 @@ def review_rounds(cfg: dict, repo: str, num: int) -> list[tuple[str, float, dict
     return sorted(((sha, w, revs) for sha, (w, revs) in rounds.items()), key=lambda x: x[1])
 
 
+def review_rounds_with_legacy_fallback(cfg: dict, repo: str, num: int, state: str) -> list[tuple[str, float, dict[str, dict]]]:
+    """Use old runtime reports only for historical closed/merged rows."""
+    rounds = review_rounds(cfg, repo, num)
+    if rounds or state not in ("MERGED", "CLOSED"):
+        return rounds
+    legacy_state = cfg.get("legacy_state_dir", "")
+    legacy_report = cfg.get("legacy_report_dir", "")
+    if not legacy_state or not legacy_report:
+        return rounds
+    return review_rounds(dict(cfg, state_dir=legacy_state, report_dir=legacy_report), repo, num)
+
+
 def all_approved(revs: dict[str, dict]) -> bool:
     return bool(revs) and all(s["verdict"] == "APPROVE" and not s["tests_failed"] and not s.get("secrets")
                               for s in revs.values())
@@ -288,7 +300,7 @@ def classify(pr: dict, cfg: dict, running: set[tuple[str, str]]) -> dict:
     labels = [l["name"] for l in pr.get("labels") or []]
     author_login = (pr.get("author") or {}).get("login", "")
     agent = next((l.split(":", 1)[1] for l in labels if l.startswith("author:")), "")
-    rounds = review_rounds(cfg, repo, num)
+    rounds = review_rounds_with_legacy_fallback(cfg, repo, num, pr["state"])
     reviews: dict[str, dict] = next((revs for s, _, revs in rounds if s == sha), {})
     # when the current head has no review (stopped, skipped, waiting), the last result is the newest earlier round
     earlier = [r for r in rounds if r[0] != sha]
@@ -402,7 +414,8 @@ def history(repo: str, num: int, gh_repo: str, cfg: dict) -> int:
 def main() -> int:
     # name|gh repo|review worktree|report dir (per repo: reports live in each repo's workspace)
     repos = [(line.split("|") + ["", ""])[:4] for line in os.environ.get("CR_REPOS", "").splitlines() if "|" in line]
-    base = {k: os.environ.get(f"CR_{k.upper()}", "") for k in ("state_dir", "inbox_dir", "trusted")}
+    base = {k: os.environ.get(f"CR_{k.upper()}", "") for k in ("state_dir", "inbox_dir", "trusted",
+                                                                  "legacy_state_dir", "legacy_report_dir")}
     if os.environ.get("CR_HISTORY"):                       # status.sh <repo> <PR>
         want_repo, want_num = os.environ["CR_HISTORY"].split("|")
         for name, gh_repo, wt, report_dir in repos:
