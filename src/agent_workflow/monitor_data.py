@@ -73,11 +73,12 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
         test = record.get("test") or {}
         test_status = short_text((test.get("status") or "-") if isinstance(test, dict) else "-", 24)
         pr = f"#{record['pr']}" if record.get("pr") else "-"
-        task_id = short_text(record.get("task_id", "?"), 32)
-        checkpoint = (root or state_root()) / "checkpoints" / f"{task_id}.json"
+        raw_task_id = record.get("task_id", "?")
+        task_id = short_text(raw_task_id, 32)
+        checkpoint = (root or state_root()) / "checkpoints" / f"{raw_task_id}.json"
         checkpoint_info = ""
         try:
-            if not isinstance(task_id, str) or not SAFE_ID.fullmatch(task_id):
+            if not isinstance(raw_task_id, str) or not SAFE_ID.fullmatch(raw_task_id):
                 raise OSError("invalid task id")
             stat = checkpoint.stat()
             size = stat.st_size

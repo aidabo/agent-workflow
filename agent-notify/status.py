@@ -27,6 +27,7 @@ import termios
 import threading
 import time
 import tty
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -52,6 +53,25 @@ STATES = {
     "typing": ("入力途中", DIM),
     "idle": ("待機", GREEN),
 }
+
+
+def truncate_ansi(text: str, limit: int) -> str:
+    """Truncate a colored line by display width while preserving colors before the cut."""
+    output: list[str] = []
+    used = 0
+    for token in re.split(r"(\x1b\[[0-9;]*m)", text):
+        if not token:
+            continue
+        if ANSI.fullmatch(token):
+            output.append(token)
+            continue
+        for char in token:
+            char_width = 2 if unicodedata.east_asian_width(char) in "WF" else 1
+            if used + char_width > max(0, limit - 1):
+                return "".join(output) + "…" + RESET
+            output.append(char)
+            used += char_width
+    return "".join(output)
 
 
 # ── tmux / processes ─────────────────────────────────────────
@@ -161,7 +181,7 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
     for session, cells in sessions.items():
         line = f"  {session}  " + " · ".join(cells)
         plain = ANSI.sub("", line)
-        output.append(truncate_display(plain, columns) if display_width(plain) > columns else line)
+        output.append(truncate_ansi(line, columns) if display_width(plain) > columns else line)
     return output
 
 

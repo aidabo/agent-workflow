@@ -95,6 +95,18 @@ class MonitorDataTests(unittest.TestCase):
                 line = format_task_lines(root)[0]
             self.assertLessEqual(display_width(line), 20)
 
+    def test_long_task_id_keeps_checkpoint_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "checkpoints").mkdir()
+            task_id = "task-" + "x" * 40
+            (root / "tasks" / f"{task_id}.json").write_text(json.dumps({
+                "task_id": task_id, "state": "busy",
+            }))
+            (root / "checkpoints" / f"{task_id}.json").write_text("checkpoint")
+            self.assertIn("cp=10B", format_task_lines(root)[0])
+
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
