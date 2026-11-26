@@ -4,7 +4,6 @@ import json
 import os
 import re
 import shutil
-import time
 import unicodedata
 from pathlib import Path
 
@@ -89,6 +88,10 @@ def agent_current_tasks(root: Path | None = None, records: list[dict] | None = N
 
 
 def is_assignment_pending(record: dict) -> bool:
+    if record.get("placeholder") is True or record.get("assigned") is False:
+        return True
+    if str(record.get("assignment") or "").lower() in {"pending", "unassigned"}:
+        return True
     return "task assignment pending" in short_text(record.get("goal"), 128).lower()
 
 
@@ -104,8 +107,9 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
     records = records if records is not None else task_records(root)
     if not records:
         return ["  現在の作業taskなし"]
+    pending = [record for record in records if record.get("state") != "done" and is_assignment_pending(record)]
     active = [record for record in records if record.get("state") != "done" and not is_assignment_pending(record)]
-    completed = [record for record in records if record.get("state") == "done"]
+    completed = [record for record in records if record.get("state") == "done" and not is_assignment_pending(record)]
     visible = (active + completed)[:max_rows]
     lines = []
     for record in visible:
@@ -136,18 +140,18 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
             line += f" 内容={goal}"
         if next_action and next_action != goal:
             line += f" 次={next_action}"
-        if test_status:
-            line += f" test={test_status}"
         if pr != "-":
             line += f" PR={pr}"
+        if test_status:
+            line += f" test={test_status}"
         if record.get("error"):
             line += " ERROR"
         width = shutil.get_terminal_size((120, 24)).columns
         line = truncate_display(line, max(1, width))
         lines.append(line)
-    omitted = len(records) - len(visible)
+    omitted = len(active) + len(completed) - len(visible)
     if omitted:
-        lines.append(f"  … 他 {omitted} task（完了済みを含む）")
+        lines.append(f"  … 他 {omitted} task")
     if not lines:
-        return ["  現在の作業taskなし（agentの割当待ち）"]
+        return [f"  現在の作業taskなし（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業taskなし"]
     return lines

@@ -72,6 +72,18 @@ class MonitorDataTests(unittest.TestCase):
             self.assertIn("内容=parallel review queue", line)
             self.assertIn("次=run monitor checks", line)
 
+    def test_assignment_pending_tasks_are_not_work_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/pending.json").write_text(json.dumps({
+                "task_id": "pending", "state": "idle", "placeholder": True,
+                "goal": "task assignment pending",
+            }))
+            lines = format_task_lines(root)
+            self.assertIn("割当待ち 1件", lines[0])
+            self.assertNotIn("pending idle", lines[0])
+
     def test_task_context_strips_control_characters(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
