@@ -33,7 +33,9 @@ flowchart LR
   C --> PR3[Implementation PR]
   PR3 --> CR3[Cross-review: code]
   CR3 -->|APPROVE| V[実行確認・受入確認]
-  V -->|pass| D[task done]
+  V -->|pass| H3[code_human_review / merge判断]
+  H3 --> MR[人がmerge]
+  MR --> D[task done]
   V -->|fail| R[Revision request]
   R --> O
 ```
@@ -174,13 +176,15 @@ plan draft
   → task running:  phase=coding / task_status=in_progress / state=busy
   → task evidence: phase=test / task_status=in_progress / state=busy
   → code review:   phase=code_review / task_status=ready_for_review / state=waiting_user
-  → verification
-      ├─ pass: task done
+  → verification: 実装の動作・受入条件を確認
+      ├─ pass: phase=code_human_review / task_status=ready_for_review / state=waiting_user
+      │          → 人がmerge → phase=done / task_status=done / state=done
       └─ fail: revision taskへ戻る
 ```
 
 assignなしの`begin`は既存利用者との互換性のためcurrent taskへ設定できる。assign済みの別taskを
 beginする場合は、明示assignを要求する。別taskのheartbeat/updateはcurrent taskを上書きしない。
+これは現行status実装からの変更であり、Phase 3で`status.py`と既存テストを更新する。
 
 ## 8. 実装フェーズ
 
@@ -211,6 +215,7 @@ beginする場合は、明示assignを要求する。別taskのheartbeat/update�
 - current taskの一意表示
 - paneへのtask context通知
 - task evidenceとacceptance criteriaの記録
+- assignなしbeginの互換規則、別task heartbeatによるcurrent task上書き禁止、既存テスト更新
 
 ### Phase 4: Revision loop
 
