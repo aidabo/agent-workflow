@@ -41,7 +41,9 @@ agent行には、同じagentのpaneが1つで、`state/agents/<agent>.json`の`c
 複数paneやcurrent taskが無い場合は誤表示を避けるため文脈を表示しない。
 
 タスク欄の`現在の作業task未登録`は、paneの作業内容を推測していない状態を示す。
-手動作業の内容を表示するには、task stateを登録し、agent indexの`current_task_id`を更新する。
+タスク欄は`state/tasks/*.json`の登録で表示され、agent行の文脈対応には
+`state/agents/<agent>.json.current_task_id`を使う。登録とcurrent task更新は
+`bin/agent-status begin --workspace … --agent … --task-id … --goal "…"`で行い、agent indexを手編集しない。
 
 取得失敗は`unknown`と表示し、推測で`done`にしない。GitHub APIが遅くてもpane stateの更新を
 止めない。
