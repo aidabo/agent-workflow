@@ -65,15 +65,23 @@ def agent_current_tasks(root: Path | None = None, records: list[dict] | None = N
     """Resolve each agent's indexed current task from one state snapshot."""
     base = root or state_root()
     records = records if records is not None else task_records(base)
-    by_id = {record.get("task_id"): record for record in records if record.get("task_id")}
+    by_id = {
+        task_id: record
+        for record in records
+        if isinstance((task_id := record.get("task_id")), str) and task_id
+    }
     current: dict[str, dict] = {}
     for path in sorted((base / "agents").glob("*.json")):
         try:
             index = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             continue
+        if not isinstance(index, dict):
+            continue
         agent = str(index.get("agent") or path.stem)
         task_id = index.get("current_task_id")
+        if not isinstance(task_id, str) or not task_id:
+            continue
         record = by_id.get(task_id)
         if record and record.get("state") not in {"done", "stale"}:
             current[agent] = record

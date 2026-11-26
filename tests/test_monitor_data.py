@@ -118,6 +118,16 @@ class MonitorDataTests(unittest.TestCase):
             current = agent_current_tasks(root)
             self.assertEqual(current["codex"]["task_id"], "current")
 
+    def test_agent_current_tasks_ignores_corrupt_indexes_and_task_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "agents").mkdir(parents=True)
+            (root / "tasks/bad.json").write_text(json.dumps({"task_id": [], "state": "busy"}))
+            (root / "agents/bad.json").write_text("[]")
+            (root / "agents/scalar.json").write_text("null")
+            self.assertEqual(agent_current_tasks(root), {})
+
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
