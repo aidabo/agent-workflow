@@ -57,6 +57,19 @@ class MonitorDataTests(unittest.TestCase):
             }))
             self.assertIn("test=-", format_task_lines(root)[0])
 
+    def test_task_goal_and_next_action_are_visible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "agent": "codex", "phase": "coding", "state": "busy",
+                "goal": "parallel review queue",
+                "next_action": "run monitor checks",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("目的=parallel review queue", line)
+            self.assertIn("次=run monitor checks", line)
+
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"

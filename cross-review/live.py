@@ -19,7 +19,7 @@ from pathlib import Path
 
 COLOR = not os.environ.get("NO_COLOR")
 RESET, BOLD, DIM = ("\033[0m", "\033[1m", "\033[2m") if COLOR else ("", "", "")
-RED, GREEN, YELLOW, CYAN = ("\033[31m", "\033[32m", "\033[33m", "\033[36m") if COLOR else ("", "", "", "")
+RED, GREEN, YELLOW, CYAN, MAGENTA = ("\033[31m", "\033[32m", "\033[33m", "\033[36m", "\033[35m") if COLOR else ("", "", "", "", "")
 
 
 def out(text: str) -> None:
@@ -125,7 +125,7 @@ def main() -> int:
     log = Path(os.environ.get("CR_LOG", str(Path.home() / ".cache/agent-workflow/cross-review/watch.log")))
     wts = [l.split("|", 1) for l in os.environ.get("CR_WTS", "").splitlines() if "|" in l]
 
-    print(f"{BOLD}review — live{RESET}  {DIM}(each cron pass and every step of a running review){RESET}", flush=True)
+    print(f"{BOLD}{MAGENTA}review — live{RESET}  {DIM}(each cron pass and every step of a running review){RESET}", flush=True)
     # recent history first (last reviews), then follow
     filt = LogFilter()
     try:

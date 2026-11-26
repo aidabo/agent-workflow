@@ -31,13 +31,14 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import format_task_lines
+from agent_workflow.monitor_data import format_task_lines, short_text, task_records
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
 
 RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
 RED, GREEN, YELLOW, CYAN = "\033[31m", "\033[32m", "\033[33m", "\033[36m"
+MAGENTA = "\033[35m"
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 DIM_SPAN = re.compile(r"\x1b\[2m.*?(\x1b\[0m|\x1b\[22m|$)")
@@ -122,6 +123,14 @@ def agent_lines() -> list[str]:
     """One line per session: "ThinkAI-Agents  1.1 deepseek 待機 · 1.3 codex 作業中"."""
     me = current_session()
     children = process_children()
+    task_by_agent: dict[str, str] = {}
+    for task in task_records():
+        if task.get("state") == "done":
+            continue
+        agent = str(task.get("agent") or "")
+        context = task.get("goal") or task.get("next_action") or task.get("task_id")
+        if agent and context and agent not in task_by_agent:
+            task_by_agent[agent] = short_text(context, 42)
     fmt = "#{session_name}\t#{window_index}.#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_title}"
     sessions: dict[str, list[str]] = {}
     for line in run("tmux", "list-panes", "-a", "-F", fmt).splitlines():
@@ -132,7 +141,8 @@ def agent_lines() -> list[str]:
         agent = agent_of(int(pid), children)
         if agent:
             label, color = STATES[classify(pane_id, title)]
-            sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}")
+            context = f" {DIM}· {task_by_agent[agent]}{RESET}" if agent in task_by_agent else ""
+            sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}{context}")
     if not sessions:
         return [f"  {DIM}AI エージェントの pane がありません{RESET}"]
     return [f"  {session}  " + " · ".join(cells) for session, cells in sessions.items()]
@@ -199,10 +209,10 @@ def frame(reviews: ReviewStatus) -> str:
         f"{DIM}{datetime.now():%H:%M:%S}   r: 更新  q: 終了  前のセッションへ: prefix + L{RESET}",
         *reviews.render(),
         "",
-        f"{BOLD}エージェント{RESET}",
+        f"{BOLD}{CYAN}エージェント{RESET}",
         *agents,
         "",
-        f"{BOLD}タスク{RESET}",
+        f"{BOLD}{YELLOW}タスク{RESET}",
         *tasks,
     ])
 

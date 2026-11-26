@@ -9,6 +9,11 @@ from pathlib import Path
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
+def short_text(value: object, limit: int = 64) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def state_root() -> Path:
     explicit = os.environ.get("AGENT_WORKFLOW_STATE_ROOT")
     if explicit:
@@ -68,6 +73,12 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
             f"test={test_status} PR={pr} hb={record.get('heartbeat_at', '-')}"
             f"{checkpoint_info}"
         )
+        goal = short_text(record.get("goal"), 48)
+        next_action = short_text(record.get("next_action"), 48)
+        if goal:
+            line += f" 目的={goal}"
+        if next_action and next_action != goal:
+            line += f" 次={next_action}"
         if record.get("error"):
             line += " ERROR"
         lines.append(line)
