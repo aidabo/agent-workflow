@@ -15,28 +15,32 @@ plan、task、PR、実行確認の各段階をcross-reviewで確認できるよ�
 ## 2. 全体フロー
 
 ```mermaid
-flowchart LR
-  H[人: 要望・背景・完了条件] --> O[Orchestrator session]
-  O --> I[Interview / drilldown]
-  I --> S[Clarified requirement]
-  S --> P[Plan draft]
-  P --> PR1[Plan docs PR]
-  PR1 --> CR1[Cross-review: plan]
-  CR1 -->|APPROVE| A[人がplan承認]
-  A --> TL[Task list生成]
-  TL --> PR2[Task specification PR/docs]
-  PR2 --> CR2[Cross-review: task contract]
-  CR2 -->|APPROVE| AS[Assign proposal]
-  AS --> H2[人が割り当て承認]
-  H2 --> W[Work session / agent pane]
-  W --> C[Code / test / evidence]
-  C --> PR3[Implementation PR]
-  PR3 --> CR3[Cross-review: code]
-  CR3 -->|APPROVE| V[実行確認・受入確認]
-  V -->|pass| H3[code_human_review / merge判断]
+flowchart TB
+  H[人<br/>要望・背景・完了条件] --> O
+  subgraph ORCH[Orchestrator session]
+    O[要件整理] --> I[Interview<br/>drilldown]
+    I --> S[Clarified<br/>requirement]
+    S --> P[Plan draft]
+    P --> PR1[Plan docs<br/>PR]
+    PR1 --> CR1[Cross-review<br/>plan]
+    CR1 -->|APPROVE| A[人がplan<br/>承認]
+    A --> TL[Task list<br/>生成]
+    TL --> PR2[Task contract<br/>PR/docs]
+    PR2 --> CR2[Cross-review<br/>task contract]
+    CR2 -->|APPROVE| AS[Assign<br/>proposal]
+    AS --> H2[人が割り当て<br/>承認]
+  end
+  H2 --> W
+  subgraph WORK[Work session]
+    W[Agent pane<br/>Claude/Codex/DeepSeek] --> C[Code / test<br/>evidence]
+    C --> PR3[Implementation<br/>PR]
+    PR3 --> CR3[Cross-review<br/>code]
+  end
+  CR3 -->|APPROVE| V[実行確認<br/>受入確認]
+  V -->|pass| H3[code_human_review<br/>merge判断]
   H3 --> MR[人がmerge]
-  MR --> D[task done]
-  V -->|fail| R[Revision request]
+  MR --> D[task<br/>done]
+  V -->|fail| R[Revision<br/>request]
   R --> O
 ```
 
