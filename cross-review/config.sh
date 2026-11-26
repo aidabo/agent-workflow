@@ -11,7 +11,7 @@ REPORT_DIR=""
 # 同じ PR head × レビュアーを二度レビューしないための記録
 STATE_DIR="${CROSS_REVIEW_STATE_DIR:-$HOME/.cache/agent-workflow/cross-review/state}"
 # 10-agent-toolsから移行する前の完了履歴をmonitorで表示するための読み取り専用fallback。
-# 値はconfig.local.shをsourceした後に既定値を補う（空を指定して無効化できる）。
+# 値はconfig.local.shをsourceした後に既定値を補う。旧履歴を止めるときはLEGACY_FALLBACK=0を使う。
 # 作者エージェントへの受け渡し箱（inbox/<agent>/ にレビューへのポインタを置く）
 INBOX_DIR="$CROSS_REVIEW_HOME/inbox"
 

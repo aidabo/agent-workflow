@@ -169,6 +169,22 @@ class Classify(unittest.TestCase):
         self.assertEqual(it["key"], "waiting")
         self.assertIn("next cron pass", line)
 
+    def test_legacy_history_requires_both_legacy_directories(self):
+        legacy_state = Path(self.tmp.name) / "legacy-state"
+        legacy_reports = Path(self.tmp.name) / "legacy-reports"
+        legacy_state.mkdir()
+        legacy_reports.mkdir()
+        (legacy_state / "x-9-aaaaaaaa-codex.done").touch()
+        (legacy_reports / "x-pr9-aaaaaaaa-codex.md").write_text(
+            "- head: `aaaaaaaa` / author: claude / reviewed: now\n\n## 判定\nAPPROVE\n",
+            encoding="utf-8",
+        )
+        self.cfg.update(legacy_state_dir="", legacy_report_dir=str(legacy_reports))
+        pr = {"number": 9, "title": "t", "state": "MERGED", "headRefOid": "aaaaaaaa00",
+              "mergedAt": "", "labels": [{"name": "author:claude"}], "author": {"login": "me"}}
+        item = S.classify(pr, self.cfg, set())
+        self.assertEqual(item["reviews"], {})
+
 
 if __name__ == "__main__":
     unittest.main()
