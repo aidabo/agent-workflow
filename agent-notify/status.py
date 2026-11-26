@@ -38,7 +38,6 @@ CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
 
 RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
 RED, GREEN, YELLOW, CYAN = "\033[31m", "\033[32m", "\033[33m", "\033[36m"
-MAGENTA = "\033[35m"
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 DIM_SPAN = re.compile(r"\x1b\[2m.*?(\x1b\[0m|\x1b\[22m|$)")
@@ -119,20 +118,22 @@ def current_session() -> str:
     return run("tmux", "display-message", "-p", "-t", pane, "#S").strip() if pane else ""
 
 
-def agent_lines() -> list[str]:
+def agent_lines(records: list[dict] | None = None) -> list[str]:
     """One line per session: "ThinkAI-Agents  1.1 deepseek 待機 · 1.3 codex 作業中"."""
     me = current_session()
     children = process_children()
-    task_by_agent: dict[str, str] = {}
-    for task in task_records():
-        if task.get("state") == "done":
+    task_by_agent: dict[str, list[str]] = {}
+    for task in records if records is not None else task_records():
+        if task.get("state") in {"done", "stale"}:
             continue
         agent = str(task.get("agent") or "")
         context = task.get("goal") or task.get("next_action") or task.get("task_id")
-        if agent and context and agent not in task_by_agent:
-            task_by_agent[agent] = short_text(context, 42)
+        if agent and context:
+            task_by_agent.setdefault(agent, []).append(short_text(context, 42))
     fmt = "#{session_name}\t#{window_index}.#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_title}"
     sessions: dict[str, list[str]] = {}
+    pane_count: dict[str, int] = {}
+    pane_rows: list[tuple[str, str, str, str, str]] = []
     for line in run("tmux", "list-panes", "-a", "-F", fmt).splitlines():
         parts = line.split("\t", 4)
         if len(parts) != 5 or parts[0] == me or not parts[3].isdigit():
@@ -140,9 +141,13 @@ def agent_lines() -> list[str]:
         session, index, pane_id, pid, title = parts
         agent = agent_of(int(pid), children)
         if agent:
-            label, color = STATES[classify(pane_id, title)]
-            context = f" {DIM}· {task_by_agent[agent]}{RESET}" if agent in task_by_agent else ""
-            sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}{context}")
+            pane_count[agent] = pane_count.get(agent, 0) + 1
+            pane_rows.append((session, index, pane_id, title, agent))
+    for session, index, pane_id, title, agent in pane_rows:
+        label, color = STATES[classify(pane_id, title)]
+        contexts = task_by_agent.get(agent, [])
+        context = f" {DIM}· {contexts[0]}{RESET}" if pane_count[agent] == 1 and len(contexts) == 1 else ""
+        sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}{context}")
     if not sessions:
         return [f"  {DIM}AI エージェントの pane がありません{RESET}"]
     return [f"  {session}  " + " · ".join(cells) for session, cells in sessions.items()]
@@ -198,11 +203,12 @@ def review_lines_free() -> int:
 
 
 def frame(reviews: ReviewStatus) -> str:
-    agents = agent_lines()
+    records = task_records()
+    agents = agent_lines(records)
     terminal_rows = os.get_terminal_size().lines if sys.stdout.isatty() else 40
     # Reserve clock/review/section headers, the review minimum, and one task omission row.
     task_rows = max(1, min(8, terminal_rows - 16 - len(agents)))
-    tasks = format_task_lines(max_rows=task_rows)
+    tasks = format_task_lines(max_rows=task_rows, records=records)
     AGENT_ROWS[0] = len(agents)
     TASK_ROWS[0] = len(tasks)
     return "\n".join([

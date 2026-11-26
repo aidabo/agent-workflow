@@ -36,6 +36,9 @@ task欄はpane高さから表示行数を計算し、最大8件まで表示す�
 1件まで自動的に減らし、収まらない履歴は「他N task」とまとめる。review欄とagent欄を押し出さず、
 完了taskはactive taskの後に表示する。
 
+agent行には、同じagentのpaneが1つで、未完了・staleでないtaskが1件だけ対応する場合に、
+そのtaskの`goal`または`next_action`を短く表示する。複数pane/taskで対応が曖昧な場合は誤表示を避けるため文脈を表示しない。
+
 取得失敗は`unknown`と表示し、推測で`done`にしない。GitHub APIが遅くてもpane stateの更新を
 止めない。
 

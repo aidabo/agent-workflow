@@ -7,10 +7,12 @@ import time
 from pathlib import Path
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def short_text(value: object, limit: int = 64) -> str:
-    text = " ".join(str(value or "").split())
+    text = CONTROL_CHARS.sub("", str(value or ""))
+    text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
@@ -39,8 +41,8 @@ def task_records(root: Path | None = None) -> list[dict]:
     return sorted(records, key=lambda item: (item.get("updated_at", ""), item.get("task_id", "")), reverse=True)
 
 
-def format_task_lines(root: Path | None = None, max_rows: int = 8) -> list[str]:
-    records = task_records(root)
+def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
+    records = records if records is not None else task_records(root)
     if not records:
         return ["  タスク状態ファイルなし"]
     active = [record for record in records if record.get("state") != "done"]

@@ -70,6 +70,17 @@ class MonitorDataTests(unittest.TestCase):
             self.assertIn("目的=parallel review queue", line)
             self.assertIn("次=run monitor checks", line)
 
+    def test_task_context_strips_control_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "goal": "safe\u001b[2J context",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("目的=safe[2J context", line)
+            self.assertNotIn("\x1b", line)
+
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
