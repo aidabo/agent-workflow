@@ -12,6 +12,56 @@
 本企画では、要件とplanから実行可能なtaskを作り、agentの`current_task_id`へ安全に割り当て、
 monitorで「誰が何をしているか」を継続表示できる状態を作る。
 
+## 1.1 全体概要図
+
+```mermaid
+flowchart LR
+  H[人: 要件・完了条件] --> P[Plan作成]
+  P --> TL[Task list生成]
+  TL --> V{人が確認}
+  V -->|assign| A[Agent index更新\ncurrent_task_id]
+  A --> T[Task JSON\nphase/state/status]
+  T --> W[Agent pane\nbegin / heartbeat / test]
+  W --> M[Monitor\n現在task・次の操作]
+  W --> PR[Branch / PR]
+  PR --> CR[Cross-review]
+  CR -->|APPROVE| MR[人がmerge]
+  CR -->|CHANGES_REQUESTED| W
+  CR -->|NEEDS YOU| H
+  T --> CP[Checkpoint / resume]
+  CP --> H
+```
+
+### 責務境界
+
+```mermaid
+flowchart TB
+  subgraph STATE[Workflow state: <state-root>]
+    PLAN[plans/<plan_id>.json]
+    TASK[tasks/<task_id>.json]
+    INDEX[agents/<agent>.json]
+    CP[checkpoints/<task_id>.json]
+  end
+  subgraph EXEC[実行主体]
+    CLI[agent-status / assign / reconcile]
+    PANE[Claude / Codex / DeepSeek pane]
+    MON[Monitor: read-only]
+  end
+  subgraph GITHUB[外部境界]
+    PR[GitHub branch / PR]
+    REVIEW[cross-review]
+  end
+  CLI -->|atomic write + lock| STATE
+  PANE -->|begin / heartbeat / test / end| TASK
+  PANE -->|checkpoint| CP
+  MON -->|read only| STATE
+  PANE --> PR --> REVIEW
+  REVIEW -->|result| MON
+```
+
+Monitorはtaskを作成・割り当て・修復しない。taskの作成と割り当てはCLI、人による確認はplan/taskの
+承認、実作業はagent pane、外部レビューはcross-reviewが担当する。
+
 ## 2. 基準点と範囲
 
 - 基準workflow: `v0.2.0`（PR #27までを含む安定点）
