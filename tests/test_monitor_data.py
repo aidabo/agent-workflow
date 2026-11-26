@@ -57,7 +57,7 @@ class MonitorDataTests(unittest.TestCase):
             (root / "tasks/task.json").write_text(json.dumps({
                 "task_id": "task", "state": "busy", "test": {"status": None, "summary": "running"}
             }))
-            self.assertIn("test=-", format_task_lines(root)[0])
+            self.assertNotIn("test=-", format_task_lines(root)[0])
 
     def test_task_goal_and_next_action_are_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,12 +65,47 @@ class MonitorDataTests(unittest.TestCase):
             (root / "tasks").mkdir(parents=True)
             (root / "tasks/task.json").write_text(json.dumps({
                 "task_id": "task", "agent": "codex", "phase": "coding", "state": "busy",
-                "goal": "parallel review queue",
+                "summary": "parallel review queue", "goal": "internal fallback goal",
                 "next_action": "run monitor checks",
             }))
             line = format_task_lines(root)[0]
-            self.assertIn("目的=parallel review queue", line)
+            self.assertIn("内容=parallel review queue", line)
             self.assertIn("次=run monitor checks", line)
+
+    def test_assignment_pending_tasks_are_not_work_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/pending.json").write_text(json.dumps({
+                "task_id": "pending", "state": "idle", "placeholder": True,
+                "goal": "task assignment pending",
+            }))
+            lines = format_task_lines(root)
+            self.assertIn("割当待ち 1件", lines[0])
+            self.assertNotIn("pending idle", lines[0])
+
+    def test_assignment_pending_tasks_are_not_omitted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            for name in ("one", "two"):
+                (root / "tasks" / f"{name}.json").write_text(json.dumps({
+                    "task_id": name, "state": "idle", "placeholder": True,
+                }))
+            line = format_task_lines(root)[0]
+            self.assertIn("割当待ち 2件", line)
+            self.assertNotIn("他 ", line)
+
+    def test_assignment_pending_is_based_on_goal_even_with_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/pending.json").write_text(json.dumps({
+                "task_id": "pending", "state": "idle", "summary": "waiting",
+                "goal": "task assignment pending",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("割当待ち 1件", line)
 
     def test_task_context_strips_control_characters(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,7 +115,7 @@ class MonitorDataTests(unittest.TestCase):
                 "task_id": "task", "state": "busy", "goal": "safe\u001b[2J context",
             }))
             line = format_task_lines(root)[0]
-            self.assertIn("目的=safe[2J context", line)
+            self.assertIn("内容=safe[2J context", line)
             self.assertNotIn("\x1b", line)
 
     def test_task_lines_use_terminal_display_width(self):
@@ -95,7 +130,7 @@ class MonitorDataTests(unittest.TestCase):
                 line = format_task_lines(root)[0]
             self.assertLessEqual(display_width(line), 20)
 
-    def test_long_task_id_keeps_checkpoint_summary(self):
+    def test_long_task_id_is_displayed_without_checkpoint_internals(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
             (root / "tasks").mkdir(parents=True)
@@ -105,7 +140,7 @@ class MonitorDataTests(unittest.TestCase):
                 "task_id": task_id, "state": "busy",
             }))
             (root / "checkpoints" / f"{task_id}.json").write_text("checkpoint")
-            self.assertIn("cp=10B", format_task_lines(root)[0])
+            self.assertNotIn("cp=", format_task_lines(root)[0])
 
     def test_agent_current_task_index_wins_over_task_update_order(self):
         with tempfile.TemporaryDirectory() as tmp:

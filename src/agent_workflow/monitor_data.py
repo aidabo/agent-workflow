@@ -4,7 +4,6 @@ import json
 import os
 import re
 import shutil
-import time
 import unicodedata
 from pathlib import Path
 
@@ -88,17 +87,34 @@ def agent_current_tasks(root: Path | None = None, records: list[dict] | None = N
     return current
 
 
+def is_assignment_pending(record: dict) -> bool:
+    if record.get("placeholder") is True or record.get("assigned") is False:
+        return True
+    if str(record.get("assignment") or "").lower() in {"pending", "unassigned"}:
+        return True
+    return "task assignment pending" in short_text(record.get("goal"), 128).lower()
+
+
+def task_summary(record: dict, limit: int = 48) -> str:
+    for key in ("summary", "current_work", "description", "goal", "next_action", "task_id"):
+        value = short_text(record.get(key), limit)
+        if value:
+            return value
+    return ""
+
+
 def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
     records = records if records is not None else task_records(root)
     if not records:
-        return ["  タスク状態ファイルなし"]
-    active = [record for record in records if record.get("state") != "done"]
-    completed = [record for record in records if record.get("state") == "done"]
+        return ["  現在の作業taskなし"]
+    pending = [record for record in records if record.get("state") != "done" and is_assignment_pending(record)]
+    active = [record for record in records if record.get("state") != "done" and not is_assignment_pending(record)]
+    completed = [record for record in records if record.get("state") == "done" and not is_assignment_pending(record)]
     visible = (active + completed)[:max_rows]
     lines = []
     for record in visible:
         test = record.get("test") or {}
-        test_status = short_text((test.get("status") or "-") if isinstance(test, dict) else "-", 24)
+        test_status = short_text((test.get("status") or "") if isinstance(test, dict) else "", 24)
         pr = f"#{record['pr']}" if record.get("pr") else "-"
         raw_task_id = record.get("task_id", "?")
         task_id = short_text(raw_task_id, 32)
@@ -109,32 +125,33 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
                 raise OSError("invalid task id")
             stat = checkpoint.stat()
             size = stat.st_size
-            shown = f"{size / 1024:.0f}KB" if size >= 1024 else f"{size}B"
-            age = max(0, int(time.time() - stat.st_mtime))
-            age_label = f"{age // 3600}h" if age >= 3600 else f"{age // 60}m"
-            checkpoint_info = f" cp={shown}·{age_label}"
             if size > 512 * 1024:
-                checkpoint_info += "!"
+                checkpoint_info = " checkpoint=large!"
         except OSError:
             pass
         line = (
             f"  {short_text(record.get('agent', '?'), 20)} [{short_text(record.get('phase', '?'), 24)}] "
-            f"{task_id} {short_text(record.get('state', '?'), 16)} "
-            f"test={test_status} PR={pr} hb={short_text(record.get('heartbeat_at', '-'), 32)}"
+            f"{task_id} {short_text(record.get('state', '?'), 16)}"
             f"{checkpoint_info}"
         )
-        goal = short_text(record.get("goal"), 48)
+        goal = task_summary(record)
         next_action = short_text(record.get("next_action"), 48)
         if goal:
-            line += f" 目的={goal}"
+            line += f" 内容={goal}"
         if next_action and next_action != goal:
             line += f" 次={next_action}"
+        if pr != "-":
+            line += f" PR={pr}"
+        if test_status:
+            line += f" test={test_status}"
         if record.get("error"):
             line += " ERROR"
         width = shutil.get_terminal_size((120, 24)).columns
         line = truncate_display(line, max(1, width))
         lines.append(line)
-    omitted = len(records) - len(visible)
+    if not visible:
+        return [f"  現在の作業taskなし（agentの割当待ち {len(pending)}件）" if pending else "  現在の作業taskなし"]
+    omitted = len(active) + len(completed) - len(visible)
     if omitted:
-        lines.append(f"  … 他 {omitted} task（完了済みを含む）")
+        lines.append(f"  … 他 {omitted} task")
     return lines
