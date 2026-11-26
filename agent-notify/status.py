@@ -25,6 +25,7 @@ import subprocess
 import sys
 import termios
 import threading
+import time
 import tty
 import unicodedata
 from datetime import datetime
