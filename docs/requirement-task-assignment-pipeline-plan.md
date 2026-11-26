@@ -74,21 +74,21 @@ monitorで「誰が何をしているか」を継続表示できる状態を作�
 - `current_task_id`: monitorとresumeが表示・再開に使うtask
 - `heartbeat_at`: agentの生存状態
 
-割り当てはtask JSONとagent indexを同じロック・atomic更新単位で更新し、片方だけ更新された状態を
-避ける。
+割り当ては共通のassignment lockを取得してから、task JSONを先にatomic writeし、agent indexを
+後にatomic writeする。2ファイルを同時に置き換えるatomic transactionは既存status CLIに無いため、
+monitorは片方だけ更新された状態を検出して警告し、再実行可能なreconcile処理で修復する。
 
 ## 5. 状態遷移
 
 ```text
-plan draft
-  → plan approved
-  → task planned
-  → task assigned
-  → task in_progress
-  → task ready_for_review
-  → task done
+plan draft → plan approved → task planned
+task assigned: phase=assigned / task_status=ready / state=idle
+task running:  phase=coding  / task_status=in_progress / state=busy
+task review:   phase=code_review / task_status=ready_for_review / state=waiting_user
+task done:     phase=done / task_status=done / state=done
 ```
 
+`assigned`はphase、`stale`はstate、`ready`/`in_progress`はtask_statusであり、同じ軸の値ではない。
 割り当て解除、stale、needs_humanは通常の進行と分ける。
 
 - `planned`: taskは作成済みだがagent未割り当て
@@ -99,15 +99,16 @@ plan draft
 
 ## 6. CLI案
 
-既存`bin/agent-workflow`または新しい`bin/agent-plan`へ段階的に追加する。
+既存の`bin/agent-status` / `src/agent_workflow/status.py`へ段階的に追加する。
+既存のsafe ID、secret拒否、atomic write、lock契約を再利用し、新しいCLIの安全境界を重複実装しない。
 
 ```text
-agent-plan create --title "..." --requirement "..."
-agent-plan add-task --plan plan-... --task-id task-001 --summary "..." --goal "..."
-agent-plan list --plan plan-...
-agent-plan assign --task task-001 --agent codex
-agent-plan unassign --task task-001
-agent-plan show --task task-001
+agent-status plan-create --title "..." --requirement "..."
+agent-status task-create --plan plan-... --task-id task-001 --summary "..." --goal "..."
+agent-status task-list --plan plan-...
+agent-status assign --task task-001 --agent codex
+agent-status unassign --task task-001
+agent-status task-show --task task-001
 ```
 
 初期実装では、入力をJSON/CLIから受け取り、LLMによる自動task分解は行わない。
@@ -115,7 +116,7 @@ agent-plan show --task task-001
 ## 7. 安全境界
 
 - taskのagent割り当ては人の明示操作を初期既定にする
-- 同じtaskを複数agentへ割り当てない（明示的なparallel taskを除く）
+- 同じtaskを複数agentへ割り当てない。複数agentのparallel taskは初期範囲外とする
 - 完了済みtaskは再割り当てしない。再開は新しいtaskまたはresume契約を使う
 - stale taskを自動で別agentへ移さない
 - agent indexのcurrent taskとtask JSONのagentが不一致ならmonitorで警告する
@@ -163,7 +164,7 @@ agent-plan show --task task-001
 
 ## 10. 実装branch方針
 
-- この文書: `docs/requirement-task-assignment-pipeline-plan`
+- この文書branch: `docs/requirement-task-assignment-plan`
 - pipeline実装: このPRをマージした後、`main`から新しい`feat/requirement-task-assignment-pipeline` branchを作る
 - Phaseごとに小さいPRへ分け、各PRでcross-reviewを完了させる
 - `v0.2.0`はpipeline実装前のbase tagとして保持する
