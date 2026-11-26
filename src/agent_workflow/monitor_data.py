@@ -92,6 +92,14 @@ def is_assignment_pending(record: dict) -> bool:
     return "task assignment pending" in short_text(record.get("goal"), 128).lower()
 
 
+def task_summary(record: dict, limit: int = 48) -> str:
+    for key in ("summary", "current_work", "description", "goal"):
+        value = short_text(record.get(key), limit)
+        if value:
+            return value
+    return ""
+
+
 def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list[dict] | None = None) -> list[str]:
     records = records if records is not None else task_records(root)
     if not records:
@@ -122,10 +130,10 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
             f"{task_id} {short_text(record.get('state', '?'), 16)}"
             f"{checkpoint_info}"
         )
-        goal = short_text(record.get("goal"), 48)
+        goal = task_summary(record)
         next_action = short_text(record.get("next_action"), 48)
         if goal:
-            line += f" 目的={goal}"
+            line += f" 内容={goal}"
         if next_action and next_action != goal:
             line += f" 次={next_action}"
         if test_status:

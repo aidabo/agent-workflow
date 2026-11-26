@@ -65,11 +65,11 @@ class MonitorDataTests(unittest.TestCase):
             (root / "tasks").mkdir(parents=True)
             (root / "tasks/task.json").write_text(json.dumps({
                 "task_id": "task", "agent": "codex", "phase": "coding", "state": "busy",
-                "goal": "parallel review queue",
+                "summary": "parallel review queue", "goal": "internal fallback goal",
                 "next_action": "run monitor checks",
             }))
             line = format_task_lines(root)[0]
-            self.assertIn("目的=parallel review queue", line)
+            self.assertIn("内容=parallel review queue", line)
             self.assertIn("次=run monitor checks", line)
 
     def test_task_context_strips_control_characters(self):
@@ -80,7 +80,7 @@ class MonitorDataTests(unittest.TestCase):
                 "task_id": "task", "state": "busy", "goal": "safe\u001b[2J context",
             }))
             line = format_task_lines(root)[0]
-            self.assertIn("目的=safe[2J context", line)
+            self.assertIn("内容=safe[2J context", line)
             self.assertNotIn("\x1b", line)
 
     def test_task_lines_use_terminal_display_width(self):

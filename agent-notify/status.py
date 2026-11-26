@@ -33,7 +33,7 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, is_assignment_pending, short_text, task_records, truncate_display
+from agent_workflow.monitor_data import agent_current_tasks, display_width, format_task_lines, is_assignment_pending, short_text, task_records, task_summary, truncate_display
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
@@ -145,7 +145,7 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
     children = process_children()
     current_tasks = agent_current_tasks(records=records)
     task_by_agent = {
-        agent: ["task未割当" if is_assignment_pending(task) else short_text(task.get("goal") or task.get("next_action") or task.get("task_id"), 42)]
+        agent: ["task未割当" if is_assignment_pending(task) else task_summary(task, 42)]
         for agent, task in current_tasks.items()
     }
     fmt = "#{session_name}\t#{window_index}.#{pane_index}\t#{pane_id}\t#{pane_pid}\t#{pane_title}"
