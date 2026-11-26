@@ -71,9 +71,9 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
     lines = []
     for record in visible:
         test = record.get("test") or {}
-        test_status = (test.get("status") or "-") if isinstance(test, dict) else "-"
+        test_status = short_text((test.get("status") or "-") if isinstance(test, dict) else "-", 24)
         pr = f"#{record['pr']}" if record.get("pr") else "-"
-        task_id = record.get("task_id", "?")
+        task_id = short_text(record.get("task_id", "?"), 32)
         checkpoint = (root or state_root()) / "checkpoints" / f"{task_id}.json"
         checkpoint_info = ""
         try:
@@ -90,9 +90,9 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
         except OSError:
             pass
         line = (
-            f"  {record.get('agent', '?')} [{record.get('phase', '?')}] "
-            f"{record.get('task_id', '?')} {record.get('state', '?')} "
-            f"test={test_status} PR={pr} hb={record.get('heartbeat_at', '-')}"
+            f"  {short_text(record.get('agent', '?'), 20)} [{short_text(record.get('phase', '?'), 24)}] "
+            f"{task_id} {short_text(record.get('state', '?'), 16)} "
+            f"test={test_status} PR={pr} hb={short_text(record.get('heartbeat_at', '-'), 32)}"
             f"{checkpoint_info}"
         )
         goal = short_text(record.get("goal"), 48)

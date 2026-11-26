@@ -32,7 +32,7 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import format_task_lines, short_text, task_records, truncate_display
+from agent_workflow.monitor_data import display_width, format_task_lines, short_text, task_records, truncate_display
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
@@ -156,7 +156,13 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
         sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}{context}")
     if not sessions:
         return [f"  {DIM}AI エージェントの pane がありません{RESET}"]
-    return [f"  {session}  " + " · ".join(cells) for session, cells in sessions.items()]
+    columns = shutil.get_terminal_size((120, 24)).columns
+    output = []
+    for session, cells in sessions.items():
+        line = f"  {session}  " + " · ".join(cells)
+        plain = ANSI.sub("", line)
+        output.append(truncate_display(plain, columns) if display_width(plain) > columns else line)
+    return output
 
 
 class ReviewStatus:
