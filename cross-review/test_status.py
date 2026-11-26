@@ -121,6 +121,21 @@ class Classify(unittest.TestCase):
         self.assertIn("deepseek waiting", note)
         self.assertIn("running tests", note)
 
+    def test_running_review_reports_active_and_waiting_reviewers(self):
+        work = Path(self.tmp.name) / "work"
+        cross = work / ".cross-review"
+        cross.mkdir(parents=True)
+        (cross / "phase").write_text(f"review {time.time()}\n", encoding="utf-8")
+        (cross / "reviewers").write_text("codex\ndeepseek\n", encoding="utf-8")
+        (cross / "codex.events.jsonl").write_text(
+            '{"type":"item.started","item":{"type":"command_execution","command":"sed index.ts"}}\n',
+            encoding="utf-8",
+        )
+        note = S.review_progress(str(work), "claude")
+        self.assertIn("codex", note)
+        self.assertIn("active", note)
+        self.assertIn("deepseek waiting", note)
+
 
 if __name__ == "__main__":
     unittest.main()

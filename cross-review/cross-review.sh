@@ -45,6 +45,8 @@ mkdir -p "$REPORT_DIR" "$STATE_DIR" "$INBOX_DIR"
 # 同じPRの重複起動だけはこのlockで直列化する。
 exec 9>"$STATE_DIR/$repo_name-$pr.lock"
 flock 9
+# Gitの管理領域（FETCH_HEAD / .git/worktrees）は同一repoで共有するため、短時間だけ直列化する。
+exec 7>"$STATE_DIR/$repo_name.git.lock"
 
 # ── PR 情報 ────────────────────────────────────────────────
 pr_json="$(gh pr view "$pr" -R "$gh_repo" --json number,title,state,headRefOid,baseRefName,headRefName,body,labels,commits,isCrossRepository,author)"
@@ -150,18 +152,29 @@ prev_short="${reviewed_heads[0]:-}"     # 一番新しくレビューした head
 # ── レビュー用 worktree（detach、作者のツリーは動かさない）──────────
 review_wt="${wt}-pr${pr}"
 cleanup_review_worktree() {
+  flock 7
   git -C "$src" worktree remove --force "$review_wt" >/dev/null 2>&1 || true
+  flock -u 7
 }
 trap cleanup_review_worktree EXIT
+flock 7
+set +e
 git -C "$src" fetch -q origin "$head_sha" "$base_ref" 2>/dev/null || git -C "$src" fetch -q origin
-if [[ ! -e "$review_wt/.git" ]]; then
-  log "creating review worktree $review_wt"
-  git -C "$src" worktree add -q --detach "$review_wt" "$head_sha"
-else
-  git -C "$review_wt" reset -q --hard
-  git -C "$review_wt" clean -qfd -e node_modules -e '.env*'
-  git -C "$review_wt" checkout -q --detach "$head_sha"
+fetch_rc=$?
+if [[ $fetch_rc -eq 0 ]]; then
+  if [[ ! -e "$review_wt/.git" ]]; then
+    log "creating review worktree $review_wt"
+    git -C "$src" worktree add -q --detach "$review_wt" "$head_sha"
+  else
+    git -C "$review_wt" reset -q --hard
+    git -C "$review_wt" clean -qfd -e node_modules -e '.env*'
+    git -C "$review_wt" checkout -q --detach "$head_sha"
+  fi
 fi
+worktree_rc=$?
+set -e
+flock -u 7
+(( fetch_rc == 0 && worktree_rc == 0 )) || die "failed to prepare review worktree $review_wt"
 # gitignore された node_modules と apps/*/.env* を作者のツリーから借りる（symlink、読むだけ）
 while IFS= read -r nm; do
   rel="${nm#"$src"/}"
@@ -180,6 +193,7 @@ else
   merge_base="$(git -C "$review_wt" merge-base "origin/$base_ref" "$head_sha")"
 fi
 work="$review_wt/.cross-review"; mkdir -p "$work"
+printf '%s\n' "${pending[@]}" > "$work/reviewers"
 git -C "$review_wt" diff "$merge_base" "$head_sha" > "$work/diff.patch"
 # 再レビューなら、前回のレビューと前回からの差分を worktree の中に置く（レビュアーは worktree の外を読めない）
 rm -f "$work"/prev-review-*.md "$work/since-last.patch"

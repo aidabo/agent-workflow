@@ -19,31 +19,33 @@ pids=()
 labels=()
 max_parallel="${MAX_PARALLEL_REVIEWS:-4}"
 [[ "$max_parallel" =~ ^[1-9][0-9]*$ ]] || max_parallel=4
+wait_batch() {
+  local i failed=0
+  for i in "${!pids[@]}"; do
+    if ! wait "${pids[$i]}"; then
+      echo "[watch] ${labels[$i]} failed" >&2
+      failed=1
+    fi
+  done
+  pids=()
+  labels=()
+  return "$failed"
+}
 
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name gh_repo _ _ <<<"$entry"
-  gh pr list -R "$gh_repo" --state open --json number,isDraft,labels \
-    -q '.[] | select(.isDraft|not) | select([.labels[].name] | index("no-cross-review") | not) | .number' 2>/dev/null |
   while read -r pr; do
     "$here/cross-review.sh" "$name" "$pr" &
     pids+=("$!")
     labels+=("$name #$pr")
     while [[ ${#pids[@]} -ge "$max_parallel" ]]; do
-      wait -n || true
-      for i in "${!pids[@]}"; do
-        if ! kill -0 "${pids[$i]}" 2>/dev/null; then
-          unset 'pids[i]' 'labels[i]'
-        fi
-      done
-      pids=("${pids[@]}")
-      labels=("${labels[@]}")
+      wait_batch || true
     done
-  done
+  done < <(gh pr list -R "$gh_repo" --state open --json number,isDraft,labels \
+    -q '.[] | select(.isDraft|not) | select([.labels[].name] | index("no-cross-review") | not) | .number' 2>/dev/null)
 done
 
-for i in "${!pids[@]}"; do
-  wait "${pids[$i]}" || echo "[watch] ${labels[$i]} failed" >&2
-done
+wait_batch || true
 
 # 未通知のレビューを、手すきのエージェントに届ける（前の巡回で作業中だった分も）
 "$here/notify.sh" || true

@@ -188,9 +188,13 @@ def last_action(events: Path) -> tuple[str, int]:
     return last, steps
 
 
-def expected_reviewers(author: str) -> list[str]:
-    """Default cross-review reviewers, excluding the PR author."""
-    return [agent for agent in ("claude", "codex", "deepseek") if agent != author]
+def expected_reviewers(author: str, work: Path) -> list[str]:
+    """Reviewers selected for this run, with the default as a pre-start fallback."""
+    try:
+        selected = [line.strip() for line in (work / "reviewers").read_text().splitlines() if line.strip()]
+    except OSError:
+        selected = []
+    return selected or [agent for agent in ("claude", "codex", "deepseek") if agent != author]
 
 
 def review_progress(wt: str, author: str) -> str:
@@ -202,14 +206,14 @@ def review_progress(wt: str, author: str) -> str:
     except (OSError, ValueError):
         return "starting"
     now = time.time()
-    reviewers = expected_reviewers(author)
+    reviewers = expected_reviewers(author, work)
     events = {ev.name.split(".")[0]: ev for ev in work.glob("*.events.jsonl")}
     if phase == "tests":
         waiting = " | ".join(f"{r} waiting" for r in reviewers)
         return f"{waiting} · running tests {mmss(now - start_ts)}"
     parts = []
     for who in reviewers:
-        ev = events.get(f"{who}.events.jsonl")
+        ev = events.get(who)
         if ev is None:
             parts.append(f"{CYAN}{who}{RESET} waiting")
             continue
