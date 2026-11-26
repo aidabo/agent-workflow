@@ -37,7 +37,9 @@ monitorで「誰が何をしているか」を継続表示できる状態を作�
 
 ### 4.1 Plan
 
-保存先: `.agent-workflow/plans/<plan_id>.json`
+保存先: `<state-root>/plans/<plan_id>.json`（`AGENT_WORKFLOW_STATE_ROOT` / `--state-root`に従う）
+
+plan directoryは`0700`、plan JSONは`0600`、書き込みは既存のatomic writeと同じ方式にする。
 
 ```json
 {
@@ -74,9 +76,14 @@ monitorで「誰が何をしているか」を継続表示できる状態を作�
 - `current_task_id`: monitorとresumeが表示・再開に使うtask
 - `heartbeat_at`: agentの生存状態
 
-割り当ては共通のassignment lockを取得してから、task JSONを先にatomic writeし、agent indexを
-後にatomic writeする。2ファイルを同時に置き換えるatomic transactionは既存status CLIに無いため、
-monitorは片方だけ更新された状態を検出して警告し、再実行可能なreconcile処理で修復する。
+割り当ては`<state-root>/assignment.lock`を先に取得し、task JSONをtask固有lockでatomic writeした後、
+agent indexをagent固有lockでatomic writeする。ロック順は`assignment → task → agent`に固定する。
+2ファイルを同時に置き換えるatomic transactionは既存status CLIに無いため、monitorは読み取り専用の
+警告を出し、`agent-status reconcile`（Phase 2以降で実装）が片側更新を修復する。
+
+`current_task_id`は`assign`が割り当て時に設定し、`begin`が同じtaskを開始するときだけ維持・確認する。
+別taskのheartbeat/updateはcurrent taskを勝手に切り替えない。taskを切り替える場合は明示的な
+`assign`を再実行する。
 
 ## 5. 状態遷移
 
