@@ -96,6 +96,17 @@ class MonitorDataTests(unittest.TestCase):
             self.assertIn("割当待ち 2件", line)
             self.assertNotIn("他 ", line)
 
+    def test_assignment_pending_is_based_on_goal_even_with_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/pending.json").write_text(json.dumps({
+                "task_id": "pending", "state": "idle", "summary": "waiting",
+                "goal": "task assignment pending",
+            }))
+            line = format_task_lines(root)[0]
+            self.assertIn("割当待ち 1件", line)
+
     def test_task_context_strips_control_characters(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"

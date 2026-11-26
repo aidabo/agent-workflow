@@ -92,7 +92,7 @@ def is_assignment_pending(record: dict) -> bool:
         return True
     if str(record.get("assignment") or "").lower() in {"pending", "unassigned"}:
         return True
-    return "task assignment pending" in task_summary(record, 128).lower()
+    return "task assignment pending" in short_text(record.get("goal"), 128).lower()
 
 
 def task_summary(record: dict, limit: int = 48) -> str:
