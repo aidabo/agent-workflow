@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -81,6 +82,9 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
             line += f" 目的={goal}"
         if next_action and next_action != goal:
             line += f" 次={next_action}"
+        width = shutil.get_terminal_size((120, 24)).columns
+        if len(line) >= width:
+            line = line[: max(1, width - 1)] + "…"
         if record.get("error"):
             line += " ERROR"
         lines.append(line)
