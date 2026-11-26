@@ -154,6 +154,21 @@ class Classify(unittest.TestCase):
         line = PLAIN.sub("", S.render_line(item, 4))
         self.assertIn("codex ✓ tests✓", line)
 
+    def test_open_rows_do_not_use_legacy_review_history(self):
+        legacy_state = Path(self.tmp.name) / "legacy-state"
+        legacy_reports = Path(self.tmp.name) / "legacy-reports"
+        legacy_state.mkdir()
+        legacy_reports.mkdir()
+        (legacy_state / "x-9-aaaaaaaa-codex.done").touch()
+        (legacy_reports / "x-pr9-aaaaaaaa-codex.md").write_text(
+            "- head: `aaaaaaaa` / author: claude / reviewed: now\n\n## 判定\nAPPROVE\n",
+            encoding="utf-8",
+        )
+        self.cfg.update(legacy_state_dir=str(legacy_state), legacy_report_dir=str(legacy_reports))
+        it, line = self.classify("aaaaaaaa")
+        self.assertEqual(it["key"], "waiting")
+        self.assertIn("next cron pass", line)
+
 
 if __name__ == "__main__":
     unittest.main()

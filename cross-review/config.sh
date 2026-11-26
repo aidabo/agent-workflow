@@ -10,7 +10,7 @@ CROSS_REVIEW_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd
 REPORT_DIR=""
 # 同じ PR head × レビュアーを二度レビューしないための記録
 STATE_DIR="${CROSS_REVIEW_STATE_DIR:-$HOME/.cache/agent-workflow/cross-review/state}"
-# 11-agent-workflowへ移行する前の完了履歴をmonitorで表示するための読み取り専用fallback。
+# 10-agent-toolsから移行する前の完了履歴をmonitorで表示するための読み取り専用fallback。
 LEGACY_STATE_DIR="${CROSS_REVIEW_LEGACY_STATE_DIR:-$HOME/.cache/cross-review/state}"
 LEGACY_REPORT_DIR="${CROSS_REVIEW_LEGACY_REPORT_DIR:-}"
 # 作者エージェントへの受け渡し箱（inbox/<agent>/ にレビューへのポインタを置く）

@@ -16,6 +16,8 @@
 
 GitHubのPR・コメント・label・branchは共有される。ローカルreport/state/inbox/worktree/cronだけを分ける。
 
+11側のmonitorは、移行前に10側で完了したMERGED/CLOSED PRの履歴だけ、旧report/stateを読み取り専用でfallback表示する。新しいレビューの判定や巡回には旧stateを使わない。旧領域は各workspaceの`.agent-tools/reviews/`をREPOSごとに自動検出し、`CROSS_REVIEW_LEGACY_STATE_DIR` / `CROSS_REVIEW_LEGACY_REPORT_DIR`で上書きできる。移行後に旧履歴を表示しない場合は設定を空にする。
+
 ## 切り替え手順
 
 1. 10-agent-toolsの作業を止めずに、11-agent-workflowの`config.local.sh`を作る。

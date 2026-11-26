@@ -266,16 +266,21 @@ def review_rounds(cfg: dict, repo: str, num: int) -> list[tuple[str, float, dict
     return sorted(((sha, w, revs) for sha, (w, revs) in rounds.items()), key=lambda x: x[1])
 
 
-def review_rounds_with_legacy_fallback(cfg: dict, repo: str, num: int, state: str) -> list[tuple[str, float, dict[str, dict]]]:
-    """Use old runtime reports only for historical closed/merged rows."""
+def review_source(cfg: dict, repo: str, num: int, state: str) -> tuple[list[tuple[str, float, dict[str, dict]]], str]:
+    """Return rounds and the report directory used, with legacy only for history rows."""
     rounds = review_rounds(cfg, repo, num)
     if rounds or state not in ("MERGED", "CLOSED"):
-        return rounds
+        return rounds, cfg["report_dir"]
     legacy_state = cfg.get("legacy_state_dir", "")
     legacy_report = cfg.get("legacy_report_dir", "")
     if not legacy_state or not legacy_report:
-        return rounds
-    return review_rounds(dict(cfg, state_dir=legacy_state, report_dir=legacy_report), repo, num)
+        return rounds, cfg["report_dir"]
+    legacy_cfg = dict(cfg, state_dir=legacy_state, report_dir=legacy_report)
+    return review_rounds(legacy_cfg, repo, num), legacy_report
+
+
+def review_rounds_with_legacy_fallback(cfg: dict, repo: str, num: int, state: str) -> list[tuple[str, float, dict[str, dict]]]:
+    return review_source(cfg, repo, num, state)[0]
 
 
 def all_approved(revs: dict[str, dict]) -> bool:
@@ -390,7 +395,7 @@ def history(repo: str, num: int, gh_repo: str, cfg: dict) -> int:
     head = (pr.get("headRefOid") or "")[:8]
     print(f"{BOLD}{repo} #{num}{RESET} {pr.get('title', '')}  {DIM}{pr.get('state', '?')} · head {head or '?'}"
           f" · {len(pr.get('commits') or [])} commits{RESET}")
-    rounds = review_rounds(cfg, repo, num)
+    rounds, report_dir = review_source(cfg, repo, num, pr.get("state", ""))
     if not rounds:
         print(f"  {DIM}まだレビューされていません{RESET}")
         return 0
@@ -402,7 +407,7 @@ def history(repo: str, num: int, gh_repo: str, cfg: dict) -> int:
     if head and head not in {r[0] for r in rounds}:
         print(f"  {YELLOW}head {head} はまだレビューされていません（止めた・スキップ・待ち）{RESET}")
     last_sha = rounds[-1][0]
-    reports = sorted(Path(cfg["report_dir"]).glob(f"{repo}-pr{num}-{last_sha}-*.md"))
+    reports = sorted(Path(report_dir).glob(f"{repo}-pr{num}-{last_sha}-*.md"))
     print(f" 最後のレビュー（{last_sha}）:")
     for r in reports:
         print(f"  {r}")
@@ -412,22 +417,26 @@ def history(repo: str, num: int, gh_repo: str, cfg: dict) -> int:
 
 
 def main() -> int:
-    # name|gh repo|review worktree|report dir (per repo: reports live in each repo's workspace)
-    repos = [(line.split("|") + ["", ""])[:4] for line in os.environ.get("CR_REPOS", "").splitlines() if "|" in line]
+    # name|gh repo|review worktree|report dir|legacy report dir (per workspace)
+    repos = [(line.split("|") + ["", "", ""])[:5] for line in os.environ.get("CR_REPOS", "").splitlines() if "|" in line]
     base = {k: os.environ.get(f"CR_{k.upper()}", "") for k in ("state_dir", "inbox_dir", "trusted",
                                                                   "legacy_state_dir", "legacy_report_dir")}
     if os.environ.get("CR_HISTORY"):                       # status.sh <repo> <PR>
         want_repo, want_num = os.environ["CR_HISTORY"].split("|")
-        for name, gh_repo, wt, report_dir in repos:
+        for name, gh_repo, wt, report_dir, legacy_report_dir in repos:
             if name == want_repo:
-                return history(name, int(want_num), gh_repo, dict(base, report_dir=report_dir))
+                return history(name, int(want_num), gh_repo,
+                               dict(base, report_dir=report_dir,
+                                    legacy_report_dir=legacy_report_dir or base["legacy_report_dir"]))
         print(f"unknown repo: {want_repo}", file=sys.stderr)
         return 1
     done_days = float(os.environ.get("CROSS_REVIEW_DONE_DAYS", "3"))
     running = running_reviews()
     items, errors = [], []
-    for name, gh_repo, wt, report_dir in repos:
-        cfg = dict(base, name=name, wt=wt, report_dir=report_dir, trusted=base["trusted"] or gh_repo.split("/")[0])
+    for name, gh_repo, wt, report_dir, legacy_report_dir in repos:
+        cfg = dict(base, name=name, wt=wt, report_dir=report_dir,
+                   legacy_report_dir=legacy_report_dir or base["legacy_report_dir"],
+                   trusted=base["trusted"] or gh_repo.split("/")[0])
         res = subprocess.run(
             ["gh", "pr", "list", "-R", gh_repo, "--state", "all", "-L", "40", "--json",
              "number,title,state,headRefOid,isDraft,labels,isCrossRepository,author,updatedAt,mergedAt,closedAt"],
