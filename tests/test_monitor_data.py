@@ -1,13 +1,15 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agent_workflow.monitor_data import format_task_lines, task_records
+from agent_workflow.monitor_data import display_width, format_task_lines, task_records
 
 
 class MonitorDataTests(unittest.TestCase):
@@ -80,6 +82,18 @@ class MonitorDataTests(unittest.TestCase):
             line = format_task_lines(root)[0]
             self.assertIn("目的=safe[2J context", line)
             self.assertNotIn("\x1b", line)
+
+    def test_task_lines_use_terminal_display_width(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state"
+            (root / "tasks").mkdir(parents=True)
+            (root / "tasks/task.json").write_text(json.dumps({
+                "task_id": "task", "state": "busy", "goal": "日本語の長いタスク内容",
+                "error": True,
+            }))
+            with patch("agent_workflow.monitor_data.shutil.get_terminal_size", return_value=os.terminal_size((20, 24))):
+                line = format_task_lines(root)[0]
+            self.assertLessEqual(display_width(line), 20)
 
     def test_active_tasks_are_before_completed_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:

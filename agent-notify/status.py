@@ -20,6 +20,7 @@ import argparse
 import os
 import re
 import select
+import shutil
 import subprocess
 import sys
 import termios
@@ -31,7 +32,7 @@ from pathlib import Path
 
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from agent_workflow.monitor_data import format_task_lines, short_text, task_records
+from agent_workflow.monitor_data import format_task_lines, short_text, task_records, truncate_display
 
 HERE = Path(__file__).resolve().parent
 CROSS_REVIEW_STATUS = HERE.parent / "cross-review" / "status.sh"
@@ -146,7 +147,12 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
     for session, index, pane_id, title, agent in pane_rows:
         label, color = STATES[classify(pane_id, title)]
         contexts = task_by_agent.get(agent, [])
-        context = f" {DIM}· {contexts[0]}{RESET}" if pane_count[agent] == 1 and len(contexts) == 1 else ""
+        if pane_count[agent] == 1 and len(contexts) == 1:
+            columns = shutil.get_terminal_size((120, 24)).columns
+            context_budget = max(8, (columns - 24 * max(1, len(pane_rows))) // max(1, len(pane_rows)))
+            context = f" {DIM}· {truncate_display(contexts[0], context_budget)}{RESET}"
+        else:
+            context = ""
         sessions.setdefault(session, []).append(f"{DIM}{index}{RESET} {agent} {color}{label}{RESET}{context}")
     if not sessions:
         return [f"  {DIM}AI エージェントの pane がありません{RESET}"]
