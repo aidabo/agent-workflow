@@ -111,6 +111,31 @@ class Classify(unittest.TestCase):
         it, _ = self.classify("cccccccc")
         self.assertEqual((it["key"], it["final"]), ("needs_you", ""))
 
+    def test_running_tests_names_expected_reviewers(self):
+        work = Path(self.tmp.name) / "work"
+        work.mkdir()
+        (work / ".cross-review").mkdir()
+        (work / ".cross-review" / "phase").write_text(f"tests {time.time()}\n", encoding="utf-8")
+        note = S.review_progress(str(work), "claude")
+        self.assertIn("codex waiting", note)
+        self.assertIn("deepseek waiting", note)
+        self.assertIn("running tests", note)
+
+    def test_running_review_reports_active_and_waiting_reviewers(self):
+        work = Path(self.tmp.name) / "work"
+        cross = work / ".cross-review"
+        cross.mkdir(parents=True)
+        (cross / "phase").write_text(f"review {time.time()}\n", encoding="utf-8")
+        (cross / "reviewers").write_text("codex\ndeepseek\n", encoding="utf-8")
+        (cross / "codex.events.jsonl").write_text(
+            '{"type":"item.started","item":{"type":"command_execution","command":"sed index.ts"}}\n',
+            encoding="utf-8",
+        )
+        note = S.review_progress(str(work), "claude")
+        self.assertIn("codex", note)
+        self.assertIn("active", note)
+        self.assertIn("deepseek waiting", note)
+
 
 if __name__ == "__main__":
     unittest.main()

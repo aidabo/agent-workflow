@@ -51,6 +51,8 @@ tests✗ が今回の変更のせいか（main で前から落ちているだけ
 各行の `作者 → レビュアー ✓/✗/~ 指摘数` の作者は `author:` label か、レポートの author 行。
 IN REVIEW の行には、いま何をしているかが出る: `running tests 0:42`、または
 `claude Read index.ts · 12 steps · active · 2:15`（最後の操作・ツール実行数・45 秒以内に動きがあれば active、無ければ quiet と経過）。
+
+レビューはPRごとに専用worktree（`<configured-worktree>-pr<N>`）とlockを使う。同じリポジトリに複数の未レビューPRがある場合も、PR同士は並列に進み、同じPRの重複起動だけを抑止する。レビュー完了時に専用worktreeは削除する。
 元は cross-review.sh がレビュー用 worktree の `.cross-review/` に書く `phase` と `<reviewer>.events.jsonl`
 （claude は `--output-format stream-json`、codex は `--json`）。
 読むだけで、レビューは走らせない。`agent-notify/monitor.sh` の監視セッションにも同じ内容が出る。
@@ -129,7 +131,7 @@ PR のコードはこの PC でテストとして実行され（`.env` も見え
 | レビュー済みの印 | `~/.cache/agent-workflow/cross-review/state/<repo>-<N>-<sha8>-<reviewer>.done` |
 | 作者への受け渡し | `inbox/<agent>/*.txt`（作者が対応したら消す）、`.notified` |
 | 巡回のログ | `~/.cache/agent-workflow/cross-review/watch.log` |
-| 実行中の様子 | レビュー用 worktree の `.cross-review/`（`phase`、`<reviewer>.events.jsonl`。次のレビューで上書き） |
+| 実行中の様子 | レビュー用 worktree `<configured-worktree>-pr<N>` の `.cross-review/`（`phase`、`<reviewer>.events.jsonl`。レビュー完了時に削除） |
 
 すべてこの PC のファイル（と GitHub の PR コメント）で、agent-tools のリポジトリには入れない（公開リポジトリなので、
 private リポジトリのコードを引用するレビューを載せない）。エージェントのセッションが切れても、PC・WSL を再起動しても残る。cron が毎分見直すので、

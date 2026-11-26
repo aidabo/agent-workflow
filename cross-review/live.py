@@ -138,30 +138,35 @@ def main() -> int:
     print(f"{DIM}── following ──{RESET}", flush=True)
 
     log_f = Follow(log, from_end=True)
-    work = {name: Path(wt) / ".cross-review" for name, wt in wts}
-    tests_f = {name: Follow(d / "tests.log", from_end=True) for name, d in work.items()}
+    work = {name: Path(wt) for name, wt in wts}
+    tests_f: dict[Path, Follow] = {}
     event_f: dict[Path, Follow] = {}
     started: dict[str, float] = {}
     while True:
         for line in log_f.lines():
             for row in filt.feed(line):
                 out(row)
-        for name, d in work.items():
-            for line in tests_f[name].lines():
-                if line.strip():
-                    out(f"{DIM}tests    │ {one_line(line, 120)}{RESET}")
-            for ev in sorted(d.glob("*.events.jsonl")):
-                if ev not in event_f:
-                    # a file that appeared after we started is a new review: read it from the top
-                    event_f[ev] = Follow(ev, from_end=ev.stat().st_mtime < START)
-                who = ev.name.split(".")[0]
-                for line in event_f[ev].lines():
-                    try:
-                        e = json.loads(line)
-                    except ValueError:
-                        continue
-                    for row in render_event(who, e, str(Path(d).parent), started):
-                        out(row)
+        for name, base in work.items():
+            dirs = sorted(base.parent.glob(f"{base.name}-pr*/.cross-review"))
+            for d in dirs:
+                if d not in tests_f:
+                    tests_f[d] = Follow(d / "tests.log", from_end=True)
+                for line in tests_f[d].lines():
+                    if line.strip():
+                        out(f"{DIM}tests    │ {one_line(line, 120)}{RESET}")
+            for d in dirs:
+                for ev in sorted(d.glob("*.events.jsonl")):
+                    if ev not in event_f:
+                        # a file that appeared after we started is a new review: read it from the top
+                        event_f[ev] = Follow(ev, from_end=ev.stat().st_mtime < START)
+                    who = ev.name.split(".")[0]
+                    for line in event_f[ev].lines():
+                        try:
+                            e = json.loads(line)
+                        except ValueError:
+                            continue
+                        for row in render_event(who, e, str(Path(d).parent), started):
+                            out(row)
         time.sleep(1)
 
 

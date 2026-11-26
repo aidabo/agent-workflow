@@ -188,7 +188,16 @@ def last_action(events: Path) -> tuple[str, int]:
     return last, steps
 
 
-def review_progress(wt: str) -> str:
+def expected_reviewers(author: str, work: Path) -> list[str]:
+    """Reviewers selected for this run, with the default as a pre-start fallback."""
+    try:
+        selected = [line.strip() for line in (work / "reviewers").read_text().splitlines() if line.strip()]
+    except OSError:
+        selected = []
+    return selected or [agent for agent in ("claude", "codex", "deepseek") if agent != author]
+
+
+def review_progress(wt: str, author: str) -> str:
     """What a running review is doing, from <worktree>/.cross-review written by cross-review.sh."""
     work = Path(wt) / ".cross-review"
     try:
@@ -197,10 +206,17 @@ def review_progress(wt: str) -> str:
     except (OSError, ValueError):
         return "starting"
     now = time.time()
+    reviewers = expected_reviewers(author, work)
+    events = {ev.name.split(".")[0]: ev for ev in work.glob("*.events.jsonl")}
     if phase == "tests":
-        return f"running tests {mmss(now - start_ts)}"
+        waiting = " | ".join(f"{r} waiting" for r in reviewers)
+        return f"{waiting} · running tests {mmss(now - start_ts)}"
     parts = []
-    for ev in sorted(work.glob("*.events.jsonl")):
+    for who in reviewers:
+        ev = events.get(who)
+        if ev is None:
+            parts.append(f"{CYAN}{who}{RESET} waiting")
+            continue
         who = ev.name.split(".")[0]
         last, steps = last_action(ev)
         quiet = now - ev.stat().st_mtime
@@ -300,7 +316,7 @@ def classify(pr: dict, cfg: dict, running: set[tuple[str, str]]) -> dict:
         elif f" {author_login} " not in trusted:
             key, note = "skipped", f"author {author_login} not trusted"
         elif (repo, str(num)) in running:
-            key, note = "running", review_progress(cfg.get("wt", ""))
+            key, note = "running", review_progress(f"{cfg.get('wt', '')}-pr{num}", agent)
         elif not reviews and (Path(cfg["state_dir"]) / f"{repo}-{num}.limit").exists():
             key, note = "needs_you", f"review stopped — merge on GitHub, or cross-review.sh {repo} {num} --force"
         elif not reviews:

@@ -41,9 +41,12 @@ done
 
 REPORT_DIR="$(report_dir_for "$src")"
 mkdir -p "$REPORT_DIR" "$STATE_DIR" "$INBOX_DIR"
-# worktree を 1 本だけ使うので、同じリポジトリのレビューは直列にする
-exec 9>"$STATE_DIR/$repo_name.lock"
+# PRごとにworktreeとlockを分け、同じリポジトリの独立したPRは並列にレビューする。
+# 同じPRの重複起動だけはこのlockで直列化する。
+exec 9>"$STATE_DIR/$repo_name-$pr.lock"
 flock 9
+# Gitの管理領域（FETCH_HEAD / .git/worktrees）は同一repoで共有するため、短時間だけ直列化する。
+exec 7>"$STATE_DIR/$repo_name.git.lock"
 
 # ── PR 情報 ────────────────────────────────────────────────
 pr_json="$(gh pr view "$pr" -R "$gh_repo" --json number,title,state,headRefOid,baseRefName,headRefName,body,labels,commits,isCrossRepository,author)"
@@ -147,39 +150,56 @@ fi
 prev_short="${reviewed_heads[0]:-}"     # 一番新しくレビューした head（再レビューの起点）
 
 # ── レビュー用 worktree（detach、作者のツリーは動かさない）──────────
+review_wt="${wt}-pr${pr}"
+cleanup_review_worktree() {
+  flock 7
+  git -C "$src" worktree remove --force "$review_wt" >/dev/null 2>&1 || true
+  flock -u 7
+}
+trap cleanup_review_worktree EXIT
+flock 7
+set +e
 git -C "$src" fetch -q origin "$head_sha" "$base_ref" 2>/dev/null || git -C "$src" fetch -q origin
-if [[ ! -e "$wt/.git" ]]; then
-  log "creating review worktree $wt"
-  git -C "$src" worktree add -q --detach "$wt" "$head_sha"
-else
-  git -C "$wt" reset -q --hard
-  git -C "$wt" clean -qfd -e node_modules -e '.env*'
-  git -C "$wt" checkout -q --detach "$head_sha"
+fetch_rc=$?
+if [[ $fetch_rc -eq 0 ]]; then
+  if [[ ! -e "$review_wt/.git" ]]; then
+    log "creating review worktree $review_wt"
+    git -C "$src" worktree add -q --detach "$review_wt" "$head_sha"
+  else
+    git -C "$review_wt" reset -q --hard
+    git -C "$review_wt" clean -qfd -e node_modules -e '.env*'
+    git -C "$review_wt" checkout -q --detach "$head_sha"
+  fi
 fi
+worktree_rc=$?
+set -e
+flock -u 7
+(( fetch_rc == 0 && worktree_rc == 0 )) || die "failed to prepare review worktree $review_wt"
 # gitignore された node_modules と apps/*/.env* を作者のツリーから借りる（symlink、読むだけ）
 while IFS= read -r nm; do
   rel="${nm#"$src"/}"
-  [[ -d "$wt/$(dirname "$rel")" && ! -e "$wt/$rel" ]] && ln -s "$nm" "$wt/$rel"
+  [[ -d "$review_wt/$(dirname "$rel")" && ! -e "$review_wt/$rel" ]] && ln -s "$nm" "$review_wt/$rel"
 done < <(find "$src" -maxdepth 4 -name node_modules -type d -prune -not -path '*/node_modules/*/*' 2>/dev/null)
 for envf in "$src"/apps/*/.env*; do
   [[ -f "$envf" ]] || continue
-  rel="${envf#"$src"/}"; [[ -e "$wt/$rel" ]] || ln -s "$envf" "$wt/$rel"
+  rel="${envf#"$src"/}"; [[ -e "$review_wt/$rel" ]] || ln -s "$envf" "$review_wt/$rel"
 done
 
 # 差分の起点は「PR の最初のコミットの親」。merge-base だとマージ済み PR（--force）で空になる。
 first_commit="$(python3 -c "import json,sys; c=json.load(sys.stdin)['commits']; print(c[0]['oid'] if c else '')" <<<"$pr_json")"
-if [[ -n "$first_commit" ]] && git -C "$wt" cat-file -e "$first_commit^" 2>/dev/null; then
-  merge_base="$(git -C "$wt" rev-parse "$first_commit^")"
+if [[ -n "$first_commit" ]] && git -C "$review_wt" cat-file -e "$first_commit^" 2>/dev/null; then
+  merge_base="$(git -C "$review_wt" rev-parse "$first_commit^")"
 else
-  merge_base="$(git -C "$wt" merge-base "origin/$base_ref" "$head_sha")"
+  merge_base="$(git -C "$review_wt" merge-base "origin/$base_ref" "$head_sha")"
 fi
-work="$wt/.cross-review"; mkdir -p "$work"
-git -C "$wt" diff "$merge_base" "$head_sha" > "$work/diff.patch"
+work="$review_wt/.cross-review"; mkdir -p "$work"
+printf '%s\n' "${pending[@]}" > "$work/reviewers"
+git -C "$review_wt" diff "$merge_base" "$head_sha" > "$work/diff.patch"
 # 再レビューなら、前回のレビューと前回からの差分を worktree の中に置く（レビュアーは worktree の外を読めない）
 rm -f "$work"/prev-review-*.md "$work/since-last.patch"
 rereview_note=""
-if [[ -n "$prev_short" ]] && git -C "$wt" rev-parse -q --verify "$prev_short^{commit}" >/dev/null; then
-  git -C "$wt" diff "$prev_short" "$head_sha" > "$work/since-last.patch"
+if [[ -n "$prev_short" ]] && git -C "$review_wt" rev-parse -q --verify "$prev_short^{commit}" >/dev/null; then
+  git -C "$review_wt" diff "$prev_short" "$head_sha" > "$work/since-last.patch"
   for f in "$REPORT_DIR/$repo_name-pr$pr-$prev_short-"*.md; do
     [[ -e "$f" && "$f" != *-limit.md ]] || continue
     who="${f##*-}"; cp "$f" "$work/prev-review-${who%.md}.md"
@@ -193,7 +213,7 @@ if [[ -n "$prev_short" ]] && git -C "$wt" rev-parse -q --verify "$prev_short^{co
 - 提案は since-last.patch の変更についてだけ、2 件まで（無ければ「なし」）。前回の提案は繰り返さない。"
   log "re-review since $prev_short ($(grep -c '^diff --git' "$work/since-last.patch") files changed since then)"
 fi
-mapfile -t changed < <(git -C "$wt" diff --name-only "$merge_base" "$head_sha")
+mapfile -t changed < <(git -C "$review_wt" diff --name-only "$merge_base" "$head_sha")
 log "changed files: ${#changed[@]}"
 
 # ── 秘密の値の検査（スクリプトが行う。AI より前）──────────────
@@ -212,9 +232,9 @@ test_summary="(テストは実行していない)"
 if [[ "$do_test" == 1 ]]; then
   host_files=(); pkg_dirs=()
   for f in "${changed[@]}"; do
-    [[ -f "$wt/$f" ]] || continue
+    [[ -f "$review_wt/$f" ]] || continue
     [[ "$f" == apps/host/* ]] && host_files+=("${f#apps/host/}")
-    top="${f%%/*}"; [[ -f "$wt/$top/tsconfig.json" ]] && pkg_dirs+=("$top")
+    top="${f%%/*}"; [[ -f "$review_wt/$top/tsconfig.json" ]] && pkg_dirs+=("$top")
   done
   mapfile -t pkg_dirs < <(printf '%s\n' "${pkg_dirs[@]}" | sort -u | sed '/^$/d')
   test_summary=""
@@ -233,7 +253,7 @@ if [[ "$do_test" == 1 ]]; then
     log "test: $cmd"
     echo "\$ $cmd" >> "$work/tests.log"
     set +e
-    (cd "$wt" && nice -n "$REVIEW_NICE" timeout "$TEST_TIMEOUT" bash -c "$cmd") >> "$work/tests.log" 2>&1
+    (cd "$review_wt" && nice -n "$REVIEW_NICE" timeout "$TEST_TIMEOUT" bash -c "$cmd") >> "$work/tests.log" 2>&1
     rc=$?
     set -e
     test_summary+="- exit=$rc: $cmd"$'\n'
@@ -306,7 +326,7 @@ run_reviewer() {
     claude)
       # サブスクのログインで動かす。API キーや親の Claude Code セッションの環境は渡さない
       # （ANTHROPIC_API_KEY があるとそちらが優先され、無効なら "Invalid API key" で落ちる）。
-      (cd "$wt" && unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDECODE \
+      (cd "$review_wt" && unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDECODE \
         CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID && nice -n "$REVIEW_NICE" timeout "$REVIEW_TIMEOUT" claude -p "$prompt" \
         --restricted --strict-mcp-config --permission-mode dontAsk --tools "Read,Grep,Glob,Bash" \
         --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
@@ -327,7 +347,7 @@ run_reviewer() {
       fi
       # 起動スクリプト（ユーザー自身のファイル）の export/unset 行だけを eval する。
       # 鍵を別ファイルに複製しないため。外部入力は通らない。
-      (cd "$wt" && unset ANTHROPIC_API_KEY CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID && set -a && eval "$(grep -E '^(export|unset) ' "$DEEPSEEK_LAUNCHER")" && set +a && export CLAUDE_CODE_EFFORT_LEVEL="$DEEPSEEK_REVIEW_EFFORT" && \
+      (cd "$review_wt" && unset ANTHROPIC_API_KEY CLAUDECODE CLAUDE_CODE_ENTRYPOINT CLAUDE_CODE_CHILD_SESSION CLAUDE_CODE_SESSION_ID && set -a && eval "$(grep -E '^(export|unset) ' "$DEEPSEEK_LAUNCHER")" && set +a && export CLAUDE_CODE_EFFORT_LEVEL="$DEEPSEEK_REVIEW_EFFORT" && \
         nice -n "$REVIEW_NICE" timeout "$REVIEW_TIMEOUT" claude -p "$prompt" \
         --restricted --strict-mcp-config --permission-mode dontAsk --tools "Read,Grep,Glob,Bash" \
         --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
@@ -336,7 +356,7 @@ run_reviewer() {
       ;;
     codex)
       # --json: イベント（実行中のコマンドなど）を $work/codex.events.jsonl に。本文は -o のファイル
-      nice -n "$REVIEW_NICE" timeout "$REVIEW_TIMEOUT" codex exec -C "$wt" --sandbox read-only --skip-git-repo-check --json \
+      nice -n "$REVIEW_NICE" timeout "$REVIEW_TIMEOUT" codex exec -C "$review_wt" --sandbox read-only --skip-git-repo-check --json \
         -o "$out" "$prompt" > "$work/codex.events.jsonl" 2> "$work/codex.stderr" < /dev/null
       ;;
     *) echo "unknown reviewer: $who" > "$out"; return 1 ;;

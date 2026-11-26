@@ -50,6 +50,8 @@ NOTIFY=1
 POST_COMMENT=1
 # レビューとテストの優先度（nice。大きいほど低い）。pane で動いているエージェントの作業を先にする
 REVIEW_NICE=10
+# 同時に走らせるPRレビュー数。PR内のcodex/deepseek並列とは別の上限。
+MAX_PARALLEL_REVIEWS=4
 # レビュアー 1 人あたりの上限秒
 REVIEW_TIMEOUT=1500
 # テスト 1 コマンドあたりの上限秒
