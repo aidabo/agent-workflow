@@ -41,6 +41,8 @@ GitHub の課金は発生しない（gh API は無料）。レビューは各エ
 ```
 
 状態: WAITING（次の巡回でレビュー）→ IN REVIEW → CHANGES REQUESTED（作者が直して push すると WAITING に戻る）/
+
+レビューはPRごとに専用worktreeとlockを使う。同じリポジトリに複数の未レビューPRがある場合も、PR同士は並列に進み、同じPRの重複起動だけを抑止する。
 NEEDS YOU（回数の上限で止めた。マージするかはあなたが決める）/
 REVIEWED（コメントだけ）/ APPROVED（GitHub でマージしてよい）。SKIPPED は draft・`no-cross-review`・fork・信頼外の作者。
 レビュアーの後ろの `tests✓` は、試験を走らせて全部が exit=0 だったこと、`tests✗` はどれかが 0 以外だったこと（試験の設定が無い・走らせていないときは何も出ない）。

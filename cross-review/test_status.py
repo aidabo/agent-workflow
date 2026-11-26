@@ -111,6 +111,16 @@ class Classify(unittest.TestCase):
         it, _ = self.classify("cccccccc")
         self.assertEqual((it["key"], it["final"]), ("needs_you", ""))
 
+    def test_running_tests_names_expected_reviewers(self):
+        work = Path(self.tmp.name) / "work"
+        work.mkdir()
+        (work / ".cross-review").mkdir()
+        (work / ".cross-review" / "phase").write_text(f"tests {time.time()}\n", encoding="utf-8")
+        note = S.review_progress(str(work), "claude")
+        self.assertIn("codex waiting", note)
+        self.assertIn("deepseek waiting", note)
+        self.assertIn("running tests", note)
+
 
 if __name__ == "__main__":
     unittest.main()
