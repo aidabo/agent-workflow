@@ -11,8 +11,7 @@ REPORT_DIR=""
 # 同じ PR head × レビュアーを二度レビューしないための記録
 STATE_DIR="${CROSS_REVIEW_STATE_DIR:-$HOME/.cache/agent-workflow/cross-review/state}"
 # 10-agent-toolsから移行する前の完了履歴をmonitorで表示するための読み取り専用fallback。
-LEGACY_STATE_DIR="${CROSS_REVIEW_LEGACY_STATE_DIR:-$HOME/.cache/cross-review/state}"
-LEGACY_REPORT_DIR="${CROSS_REVIEW_LEGACY_REPORT_DIR:-}"
+# 値はconfig.local.shをsourceした後に既定値を補う（空を指定して無効化できる）。
 # 作者エージェントへの受け渡し箱（inbox/<agent>/ にレビューへのポインタを置く）
 INBOX_DIR="$CROSS_REVIEW_HOME/inbox"
 
@@ -82,6 +81,14 @@ _cross_review_local="${CROSS_REVIEW_CONFIG:-$CROSS_REVIEW_HOME/config.local.sh}"
 # shellcheck source=/dev/null
 [[ -f "$_cross_review_local" ]] && source "$_cross_review_local"
 unset _cross_review_local
+
+if [[ -z "${LEGACY_STATE_DIR+x}" ]]; then
+  LEGACY_STATE_DIR="${CROSS_REVIEW_LEGACY_STATE_DIR:-$HOME/.cache/cross-review/state}"
+fi
+if [[ -z "${LEGACY_REPORT_DIR+x}" ]]; then
+  LEGACY_REPORT_DIR="${CROSS_REVIEW_LEGACY_REPORT_DIR:-}"
+fi
+LEGACY_FALLBACK="${LEGACY_FALLBACK:-1}"
 
 # deepseek の起動スクリプトを PATH から解決する（EXTRA_PATH も見る）。
 # cron は PATH が最小なので、置き場所は config.local.sh の EXTRA_PATH に足すか、

@@ -20,7 +20,7 @@ repos=""
 for entry in "${REPOS[@]}"; do
   IFS='|' read -r name gh_repo src wt <<<"$entry"
   legacy_report_dir="${LEGACY_REPORT_DIR:-}"
-  if [[ -z "$legacy_report_dir" ]]; then
+  if [[ "${LEGACY_FALLBACK:-1}" != 0 && -z "$legacy_report_dir" ]]; then
     d="$src"
     while [[ -n "$d" && "$d" != "/" && "$d" != "." ]]; do
       if [[ -f "$d/agents.yaml" && -d "$d/.agent-tools/reviews" ]]; then
@@ -47,6 +47,6 @@ else
 fi
 
 CR_REPOS="$repos" CR_STATE_DIR="$STATE_DIR" CR_INBOX_DIR="$INBOX_DIR" \
-  CR_LEGACY_STATE_DIR="$LEGACY_STATE_DIR" CR_LEGACY_REPORT_DIR="${LEGACY_REPORT_DIR:-}" \
+  CR_LEGACY_STATE_DIR="$LEGACY_STATE_DIR" CR_LEGACY_REPORT_DIR="" \
 CR_TRUSTED="${TRUSTED_AUTHORS:-}" CR_CRON_LINE="$cron_line" \
   exec python3 "$here/status.py"

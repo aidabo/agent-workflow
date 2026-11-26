@@ -133,7 +133,7 @@ PR のコードはこの PC でテストとして実行され（`.env` も見え
 | 巡回のログ | `~/.cache/agent-workflow/cross-review/watch.log` |
 | 実行中の様子 | レビュー用 worktree `<configured-worktree>-pr<N>` の `.cross-review/`（`phase`、`<reviewer>.events.jsonl`。レビュー完了時に削除） |
 
-旧10-agent-toolsの完了履歴は、MERGED/CLOSED行と`status.sh <repo> <PR>`の履歴表示に限り読み取り専用でfallbackする。workspaceごとの`.agent-tools/reviews/`を自動検出し、`CROSS_REVIEW_LEGACY_STATE_DIR` / `CROSS_REVIEW_LEGACY_REPORT_DIR`で上書きできる。新規reviewの判定には使わない。
+旧10-agent-toolsの完了履歴は、MERGED/CLOSED行と`status.sh <repo> <PR>`の履歴表示に限り読み取り専用でfallbackする。workspaceごとの`.agent-tools/reviews/`を自動検出し、`LEGACY_STATE_DIR` / `LEGACY_REPORT_DIR`で上書きできる。`LEGACY_FALLBACK=0`で無効化できる。新規reviewの判定には使わない。
 
 すべてこの PC のファイル（と GitHub の PR コメント）で、agent-tools のリポジトリには入れない（公開リポジトリなので、
 private リポジトリのコードを引用するレビューを載せない）。エージェントのセッションが切れても、PC・WSL を再起動しても残る。cron が毎分見直すので、
