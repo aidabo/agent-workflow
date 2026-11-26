@@ -52,7 +52,8 @@ flowchart TB
     REVIEW[cross-review]
   end
   CLI -->|atomic write + lock| STATE
-  PANE -->|begin / heartbeat / test / end| TASK
+  PANE -->|agent-status経由| TASK
+  PANE -->|active/current task index| INDEX
   PANE -->|checkpoint| CP
   MON -->|read only| STATE
   PANE --> PR --> REVIEW
@@ -132,8 +133,9 @@ agent indexをagent固有lockでatomic writeする。ロック順は`assignment 
 警告を出し、`agent-status reconcile`（Phase 2以降で実装）が片側更新を修復する。
 
 `current_task_id`は`assign`が割り当て時に設定し、`begin`が同じtaskを開始するときだけ維持・確認する。
-別taskのheartbeat/updateはcurrent taskを勝手に切り替えない。taskを切り替える場合は明示的な
-`assign`を再実行する。
+assignされていないtaskを`begin`した場合は、既存利用者との互換性のため従来どおりcurrentに設定する。
+assign済みの別taskを`begin`する場合は、明示的な`assign`を先に要求する。別taskのheartbeat/updateは
+current taskを勝手に切り替えない。これに伴うstatus実装と既存テストの更新はPhase 3で行う。
 
 ## 5. 状態遷移
 
@@ -195,10 +197,13 @@ agent-status task-show --task task-001
 - task JSONとagent indexのatomic更新
 - current taskのagent行表示
 - 重複割り当て・done/stale割り当て拒否
+- `reconcile`（task/index片側更新の修復、何度実行しても同じ結果）
 
 ### Phase 3: agent実行との接続
 
 - `begin`がassigned taskをin_progressへ遷移
+- assignなしのbeginは既存互換でcurrent taskに設定し、assign済み別taskのbeginは拒否する
+- heartbeat/updateが別taskのcurrent_task_idを上書きしない
 - heartbeat/test/endとplan acceptance criteriaの連携
 - resume候補にplan/taskの内容を表示
 
