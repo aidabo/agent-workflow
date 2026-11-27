@@ -12,7 +12,7 @@ assign、current task表示、reconcile、revision実行は後続Phaseの手順�
 ## 1. 開始前の確認
 
 ```bash
-cd <repo-root>/11-agent-workflow
+cd <WORKFLOW_HOME>
 git status --short --branch
 git tag --points-at HEAD
 ```
@@ -54,13 +54,15 @@ clarified requirementへまとめる。
 ```json
 {
   "problem": "何が困っているか",
+  "users": ["誰が使うか"],
   "desired_outcome": "どうなれば成功か",
   "scope": ["含める範囲"],
   "non_goals": ["含めない範囲"],
   "constraints": ["守る条件"],
   "acceptance_criteria": ["確認可能な完了条件"],
   "open_questions": [],
-  "assumptions": []
+  "assumptions": [],
+  "risk_level": "low|medium|high"
 }
 ```
 
@@ -98,10 +100,10 @@ plan承認後、task listを確認する。
 | agent候補 | 必要な技能・repositoryを持つか |
 | 依存関係 | 前taskが終わるまで開始してはいけないtaskが明確か |
 
-割り当てはPhase 2で人が承認する。将来のCLIでは次の操作になる。
+割り当てはPhase 2で人が承認する。将来のCLIでは次の操作になる（引数名は実装時に設計書と確定する）。
 
 ```bash
-agent-status assign --task-id task-001 --agent codex
+agent-status assign --task task-001 --agent codex
 ```
 
 assign後の正しい状態は次のとおり。
@@ -145,7 +147,7 @@ monitorで次を確認する。
 
 - task未登録: agent-status begin/assignの登録状態を確認する
 - stale: 自動再割り当てせず、人が判断する
-- task/index不一致: monitorの警告を記録する。reconcileはPhase 2以降で実装する
+- task/index不一致: monitorの警告を記録する。Phase 1ではtask JSONとagent indexを手で突き合わせ、reconcileはPhase 2以降で実装する
 - 要件不足: work agentに推測させずOrchestratorへ戻す
 
 ## 8. 完了・修正
