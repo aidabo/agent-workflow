@@ -2,10 +2,12 @@
 
 ## 1. 結論
 
-agentを2種類のsessionに分離する。
+agentを2種類のsessionに分離し、Critic/Verifierはtask単位の短命subagentとして使う。
 
-- **orchestrator session**: 要件をinterviewで明確化し、plan/taskを生成・レビュー・割り当てる
+- **orchestrator session**: 要件をtriageし、必要な場合だけinterviewでdrilldownし、plan/taskを生成・レビュー・割り当てる
 - **work session**: 割り当て済みtaskを実装し、test・PR・修正を行う
+- **Critic**: plan/taskの抜け、矛盾、依存関係、受入条件を読み取り専用で確認する
+- **Verifier**: test/evidenceとacceptance criteriaを確認し、pass/fail理由を記録する
 
 orchestratorはproduct codeを編集しない。work agentは未承認の要件を勝手にtask化しない。
 plan、task、PR、実行確認の各段階をcross-reviewで確認できるようにする。
@@ -18,10 +20,13 @@ plan、task、PR、実行確認の各段階をcross-reviewで確認できるよ�
 flowchart TB
   H[人<br/>要望・背景・完了条件] --> O
   subgraph ORCH[Orchestrator session]
-    O[要件整理] --> I[Interview<br/>drilldown]
-    I --> S[Clarified<br/>requirement]
+    O[要件triage] --> I{曖昧さ?}
+    I -->|skip| S[Clarified<br/>requirement]
+    I -->|targeted/full| Q[Interview<br/>drilldown]
+    Q --> S
     S --> P[Plan draft]
-    P --> PR1[Plan docs<br/>PR]
+    P --> K[Critic<br/>plan/task review]
+    K --> PR1[Plan docs<br/>PR]
     PR1 --> CR1[Cross-review<br/>plan]
     CR1 -->|APPROVE| A[人がplan<br/>承認]
     A --> TL[Task list<br/>生成]
@@ -37,10 +42,11 @@ flowchart TB
     PR3 --> CR3[Cross-review<br/>code]
   end
   CR3 -->|APPROVE| V[実行確認<br/>受入確認]
-  V -->|pass| H3[code_human_review<br/>merge判断]
+  V --> VF[Verifier<br/>evidence check]
+  VF -->|pass| H3[code_human_review<br/>merge判断]
   H3 --> MR[人がmerge]
   MR --> D[task<br/>done]
-  V -->|fail| R[Revision<br/>request]
+  VF -->|fail| R[Revision<br/>request]
   R --> O
 ```
 
@@ -52,7 +58,8 @@ orchestratorは計画を扱う専用pane/sessionであり、work agentと分離�
 
 担当:
 
-- interviewを一問ずつ進める
+- 要件の曖昧度とriskをtriageし、interviewをskip/targeted/fullから選ぶ
+- 必要な場合だけinterviewを一問ずつ進める
 - 要望、背景、利用者、制約、非対象、完了条件を整理する
 - 曖昧な点を仮定で埋めず、`open_questions`として残す
 - clarified requirementからplan draftを作る
@@ -60,6 +67,7 @@ orchestratorは計画を扱う専用pane/sessionであり、work agentと分離�
 - plan/task docs PRを作り、cross-reviewへ出す
 - 実行確認が失敗したとき、元taskを上書きせずrevision taskを作る
 - taskのassign/unassign/reconcileをCLI経由で行う
+- Critic/Verifierの結果をplan/task stateへ反映する
 
 禁止:
 
@@ -68,7 +76,16 @@ orchestratorは計画を扱う専用pane/sessionであり、work agentと分離�
 - paneの会話だけをtaskの正本にする
 - cross-reviewの指摘を黙って破棄する
 
-### 3.2 Work session
+### 3.2 Critic / Verifier subagent
+
+CriticとVerifierは常時paneを持たず、plan/taskまたはverificationごとに読み取り専用で起動する。
+
+- Critic: plan/taskの抜け、矛盾、依存関係、受入条件、scope外を確認する
+- Verifier: test/evidenceをacceptance criteriaと照合し、`pass`または理由付き`fail`を返す
+- どちらもproduct code、task割り当て、mergeを直接変更しない
+- 結果はorchestratorがstate/PR commentへ反映する
+
+### 3.3 Work session
 
 work sessionはClaude/Codex/DeepSeekなどの実行paneである。
 
@@ -88,7 +105,9 @@ work sessionはClaude/Codex/DeepSeekなどの実行paneである。
 
 ## 4. Interview / drilldown契約
 
-interviewは、最初の要望をそのまま実装taskに変換するためのものではない。
+interviewは、最初の要望をそのまま実装taskに変換するためのものではない。Orchestratorは要件の
+曖昧度・risk・変更範囲をtriageし、明確な低risk要件はskip、論点が限定される場合はtargeted、
+大きく曖昧な要件はfull interviewを選ぶ。
 
 最低限、次を確定する。
 
@@ -197,12 +216,17 @@ pipeline管理task（`pipeline_managed=true`）は、人のassign承認なしに
 - plan schema
 - task contract schema
 - plan/task docs PRをcross-reviewへ出すCLI/手順
+- Criticのplan/task review結果を保存する契約
+- Verifierのevidence/pass/fail結果を保存する契約
 
 ### Phase 1: Orchestratorのdraft生成
 
+- 要件の曖昧度・risk triage
+- skip/targeted/full interviewの選択
 - interview成果物の保存
 - plan draft生成
 - task list生成
+- Criticによるplan/task draftの検査
 - 人の承認前はassign不可
 
 ### Phase 2: Assign / reconcile
@@ -222,6 +246,7 @@ pipeline管理task（`pipeline_managed=true`）は、人のassign承認なしに
 
 ### Phase 4: Revision loop
 
+- Verifierによるacceptance criteria照合
 - verification failedの記録
 - revision task生成
 - 再assign・再review
