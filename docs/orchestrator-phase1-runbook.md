@@ -179,7 +179,6 @@ task-001 revision=0
 - plan draftを人が確認できる
 - plan/task docsをcross-reviewへ出せる
 - 人がplan/task draftを確認し、assign前の承認判断ができる
-- plan/task docsをcross-reviewへ出せる
 - Phase 2以降のassign/current task/revisionへの引き継ぎ条件が記録される
 - 既存のwork session、cross-review、checkpoint/resumeを壊さない
 
