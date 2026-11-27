@@ -97,6 +97,75 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(json.loads((root / "plan-1.json").read_text())["task_ids"], [])
             self.assertEqual(json.loads((root / "plan-2.json").read_text())["task_ids"], ["task-1"])
 
+    def test_plan_approve_and_assign_update_task_and_agent_atomically(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            assign_args = [
+                "assign", "--workspace", tmp, "--task-id", "task-1", "--agent", "codex",
+            ]
+            self.assertEqual(main(assign_args), 2)
+            self.assertEqual(main([
+                "plan-approve", "--workspace", tmp, "--plan-id", "plan-1",
+            ]), 0)
+            self.assertEqual(main(assign_args), 0)
+            root = Path(tmp) / ".agent-workflow/state"
+            task = json.loads((root / "tasks/task-1.json").read_text())
+            agent = json.loads((root / "agents/codex.json").read_text())
+            self.assertEqual((task["agent"], task["phase"], task["state"], task["task_status"]),
+                             ("codex", "assigned", "busy", "in_progress"))
+            self.assertEqual(agent["active_task_ids"], ["task-1"])
+            self.assertEqual(agent["current_task_id"], "task-1")
+
+    def test_unassign_clears_current_task_but_does_not_unassign_active_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 0)
+            self.assertEqual(main([
+                "assign", "--workspace", tmp, "--task-id", "task-1", "--agent", "codex",
+            ]), 0)
+            self.assertEqual(main(["unassign", "--workspace", tmp, "--task-id", "task-1"]), 0)
+            root = Path(tmp) / ".agent-workflow/state"
+            task = json.loads((root / "tasks/task-1.json").read_text())
+            agent = json.loads((root / "agents/codex.json").read_text())
+            self.assertIsNone(task["agent"])
+            self.assertEqual((task["phase"], task["state"], task["task_status"]), ("docs", "idle", "ready"))
+            self.assertEqual(agent["active_task_ids"], [])
+            self.assertNotIn("current_task_id", agent)
+
+    def test_reconcile_repairs_task_and_agent_sides_idempotently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            root = Path(tmp) / ".agent-workflow/state"
+            atomic_write(root / "agents/codex.json", {
+                "agent": "codex", "active_task_ids": ["task-1"], "current_task_id": "task-1",
+            })
+            self.assertEqual(main(["reconcile", "--workspace", tmp]), 0)
+            task = json.loads((root / "tasks/task-1.json").read_text())
+            self.assertEqual(task["agent"], "codex")
+            self.assertEqual(json.loads((root / "agents/codex.json").read_text())["active_task_ids"], ["task-1"])
+            self.assertEqual(main(["reconcile", "--workspace", tmp]), 0)
+
     def test_checkpoint_and_resume_preserve_task_without_changing_status(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
