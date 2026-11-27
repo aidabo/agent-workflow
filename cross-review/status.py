@@ -76,6 +76,24 @@ def fit(s: str, w: int) -> str:
     return out + "…" + " " * (w - n - 1)
 
 
+def truncate_ansi(s: str, limit: int) -> str:
+    """Keep colored review rows inside the monitor terminal width."""
+    out, used = [], 0
+    for token in re.split(r"(\x1b\[[0-9;]*m)", s):
+        if not token:
+            continue
+        if ANSI.fullmatch(token):
+            out.append(token)
+            continue
+        for ch in token:
+            cw = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+            if used + cw > max(0, limit - 1):
+                return "".join(out) + "…" + RESET
+            out.append(ch)
+            used += cw
+    return "".join(out)
+
+
 def ago(ts: float) -> str:
     s = int(time.time() - ts)
     if s < 60:
@@ -368,7 +386,7 @@ def classify(pr: dict, cfg: dict, running: set[tuple[str, str]]) -> dict:
             "last": last if not reviews and key not in ("running",) else None}
 
 
-def render_line(it: dict, repo_w: int) -> str:
+def render_line(it: dict, repo_w: int, max_width: int = 0) -> str:
     label, color, icon = STATES[it["key"]]
     head = f"  {color}{icon} {label:<17}{RESET} {DIM}{fit(it['repo'], repo_w)}{RESET} {('#' + str(it['num'])):<5} "
     final = f"  {GREEN}{BOLD}→ {it['final']}{RESET}" if it.get("final") else ""
@@ -384,7 +402,8 @@ def render_line(it: dict, repo_w: int) -> str:
     who = f"{it['agent'] or '?'} → " + cells
     note = (f"  {it['note']}" if it["key"] == "running" else f"  {DIM}{it['note']}{RESET}") if it["note"] else ""
     when = f"{DIM}{ago(it['when']):>7}{RESET}" if it["when"] else " " * 7
-    return f"{head}{title}  {when}  {who}{final}{note}"
+    line = f"{head}{title}  {when}  {who}{final}{note}"
+    return truncate_ansi(line, max_width) if max_width and width(line) > max_width else line
 
 
 def history(repo: str, num: int, gh_repo: str, cfg: dict) -> int:
@@ -456,12 +475,14 @@ def main() -> int:
     counts = {k: sum(1 for i in open_items if i["key"] == k) for k in OPEN_ORDER}
     summary = " · ".join(f"{STATES[k][1]}{counts[k]} {STATES[k][0].lower()}{RESET}"
                          for k in OPEN_ORDER if counts[k] and k != "skipped")
-    print(f"{BOLD}{CYAN}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}")
+    max_width = int(os.environ.get("CR_MAX_WIDTH") or 0)
+    summary_line = f"{BOLD}{CYAN}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}"
+    print(truncate_ansi(summary_line, max_width) if max_width and width(summary_line) > max_width else summary_line)
     if not repos:
         print(f"  {YELLOW}対象リポジトリがありません（config.local.sh の REPOS）{RESET}")
     print(*errors, sep="\n") if errors else None
     print(f" {BOLD}Open{RESET}")
-    print("\n".join(render_line(i, repo_w) for i in open_items) or f"  {DIM}none{RESET}")
+    print("\n".join(render_line(i, repo_w, max_width) for i in open_items) or f"  {DIM}none{RESET}")
     print(f" {BOLD}Done{RESET} {DIM}(last {done_days:g} days · {len(done_items)}){RESET}")
     # Done gets whatever height is left: the board passes its free lines in CR_MAX_LINES
     budget = int(os.environ.get("CR_MAX_LINES") or 0)
@@ -470,7 +491,7 @@ def main() -> int:
         max_done = max(3, budget - used - (1 if len(done_items) > budget - used else 0))
     else:
         max_done = int(os.environ.get("CROSS_REVIEW_DONE_MAX") or 15)
-    print("\n".join(render_line(i, repo_w) for i in done_items[:max_done]) or f"  {DIM}none{RESET}")
+    print("\n".join(render_line(i, repo_w, max_width) for i in done_items[:max_done]) or f"  {DIM}none{RESET}")
     if len(done_items) > max_done:
         print(f"  {DIM}… {len(done_items) - max_done} more{RESET}")
     print(os.environ.get("CR_CRON_LINE", ""))

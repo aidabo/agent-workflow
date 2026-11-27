@@ -165,7 +165,7 @@ def agent_lines(records: list[dict] | None = None) -> list[str]:
         label, color = STATES[classify(pane_id, title)]
         contexts = task_by_agent.get(agent, [])
         if pane_count[agent] == 1 and len(contexts) == 1:
-            columns = shutil.get_terminal_size((120, 24)).columns
+            columns = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 0
             context_budget = max(8, (columns - 24 * max(1, len(pane_rows))) // max(1, len(pane_rows)))
             context = f" {DIM}· {truncate_display(contexts[0], context_budget)}{RESET}"
         else:
@@ -198,7 +198,8 @@ class ReviewStatus:
 
     def loop(self) -> None:
         while True:
-            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()))
+            columns = shutil.get_terminal_size((120, 24)).columns
+            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()), CR_MAX_WIDTH=str(columns))
             try:
                 res = subprocess.run(["bash", str(CROSS_REVIEW_STATUS)], capture_output=True, text=True,
                                      timeout=120, env=env)
