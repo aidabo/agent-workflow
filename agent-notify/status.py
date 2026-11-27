@@ -198,7 +198,8 @@ class ReviewStatus:
 
     def loop(self) -> None:
         while True:
-            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()))
+            columns = shutil.get_terminal_size((120, 24)).columns
+            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()), CR_MAX_WIDTH=str(columns))
             try:
                 res = subprocess.run(["bash", str(CROSS_REVIEW_STATUS)], capture_output=True, text=True,
                                      timeout=120, env=env)
