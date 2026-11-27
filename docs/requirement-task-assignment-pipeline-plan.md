@@ -141,7 +141,7 @@ current taskを勝手に切り替えない。これに伴うstatus実装と既�
 
 ```text
 plan draft → plan approved → task planned
-task assigned: phase=assigned / task_status=ready / state=idle
+task assigned: phase=assigned / task_status=in_progress / state=busy（割り当て確定・着手待ち）
 task running:  phase=coding  / task_status=in_progress / state=busy
 task review:   phase=code_review / task_status=ready_for_review / state=waiting_user
 task done:     phase=done / task_status=done / state=done
@@ -151,8 +151,8 @@ task done:     phase=done / task_status=done / state=done
 割り当て解除、stale、needs_humanは通常の進行と分ける。
 
 - `planned`: taskは作成済みだがagent未割り当て
-- `assigned`: agentとcurrent_task_idが確定したが作業開始前
-- `in_progress`: agentが作業中
+- `assigned`: agentとcurrent_task_idが確定した着手待ち。phase=assigned / task_status=in_progress / state=busy
+- `in_progress`: begin後にphase=codingへ進み、agentが実作業中
 - `stale`: heartbeat期限超過。自動再割り当てしない
 - `needs_human`: 要件・権限・レビュー上限など人の判断が必要
 
@@ -201,7 +201,7 @@ agent-status task-show --task task-001
 
 ### Phase 3: agent実行との接続
 
-- `begin`がassigned taskをin_progressへ遷移
+- `begin`がassigned taskのphaseをassignedからcodingへ遷移
 - assignなしのbeginは既存互換でcurrent taskに設定し、assign済み別taskのbeginは拒否する
 - heartbeat/updateが別taskのcurrent_task_idを上書きしない
 - heartbeat/test/endとplan acceptance criteriaの連携
