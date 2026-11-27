@@ -159,7 +159,7 @@ def command_task_create(args: argparse.Namespace) -> int:
         "acceptance_criteria": args.acceptance_criteria,
         "phase": "docs",
         "state": "idle",
-        "task_status": "planned",
+        "task_status": "ready",
         "pipeline_managed": True,
         "created_at": now(),
         "updated_at": now(),
@@ -171,7 +171,7 @@ def command_task_create(args: argparse.Namespace) -> int:
         existing = read_json(path)
         if not args.force:
             raise ValueError(f"task already exists: {task_id} (use --force to replace draft)")
-        if not isinstance(existing, dict) or not existing.get("pipeline_managed") or existing.get("task_status") != "planned":
+        if not isinstance(existing, dict) or not existing.get("pipeline_managed") or existing.get("task_status") != "ready":
             raise ValueError("--force can replace pipeline-managed planned tasks only")
     atomic_write(path, values)
     task_ids = plan.get("task_ids") if isinstance(plan, dict) else None
@@ -193,6 +193,8 @@ def command_task_list(args: argparse.Namespace) -> int:
         try:
             record = read_json(path)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict):
             continue
         if args.plan_id and record.get("plan_id") != args.plan_id:
             continue

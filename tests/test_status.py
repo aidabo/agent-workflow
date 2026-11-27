@@ -31,7 +31,7 @@ class StatusTests(unittest.TestCase):
             task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
             self.assertEqual(plan["status"], "draft")
             self.assertEqual(plan["task_ids"], ["task-1"])
-            self.assertEqual(task["task_status"], "planned")
+            self.assertEqual(task["task_status"], "ready")
             self.assertTrue(task["pipeline_managed"])
 
     def test_plan_and_task_drafts_reject_secret_list_and_force_active_overwrite(self):
