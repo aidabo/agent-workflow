@@ -198,7 +198,7 @@ class ReviewStatus:
 
     def loop(self) -> None:
         while True:
-            columns = shutil.get_terminal_size((120, 24)).columns
+            columns = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 120
             env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()), CR_MAX_WIDTH=str(columns))
             try:
                 res = subprocess.run(["bash", str(CROSS_REVIEW_STATUS)], capture_output=True, text=True,
@@ -218,7 +218,11 @@ class ReviewStatus:
             if not self.lines:
                 return []
             stamp = f"  {DIM}({datetime.fromtimestamp(self.updated):%H:%M:%S} 更新){RESET}" if self.updated else ""
-            return [self.lines[0] + stamp, *self.lines[1:]]
+            first = self.lines[0] + stamp
+            columns = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 0
+            if columns and display_width(ANSI.sub("", first)) > columns:
+                first = truncate_ansi(first, columns)
+            return [first, *self.lines[1:]]
 
 
 AGENT_ROWS = [1]
