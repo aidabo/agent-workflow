@@ -30,8 +30,33 @@ class StatusTests(unittest.TestCase):
             plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-1.json").read_text())
             task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
             self.assertEqual(plan["status"], "draft")
+            self.assertEqual(plan["task_ids"], ["task-1"])
             self.assertEqual(task["task_status"], "planned")
             self.assertTrue(task["pipeline_managed"])
+
+    def test_plan_and_task_drafts_reject_secret_list_and_force_active_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+                "--acceptance-criteria", "sk-secret-value-that-must-not-save",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            self.assertEqual(main([
+                "begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
+                "--phase", "coding",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Reset", "--goal", "Reset", "--force",
+            ]), 2)
 
     def test_checkpoint_and_resume_preserve_task_without_changing_status(self):
         with tempfile.TemporaryDirectory() as tmp:

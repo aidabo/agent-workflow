@@ -94,6 +94,14 @@ def reject_secret(value: str | None, label: str) -> None:
         raise ValueError(f"secret-like value is not allowed in {label}")
 
 
+def reject_secret_values(value: Any, label: str) -> None:
+    if isinstance(value, str):
+        reject_secret(value, label)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            reject_secret_values(item, f"{label}[{index}]")
+
+
 def command_plan_create(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
@@ -109,17 +117,21 @@ def command_plan_create(args: argparse.Namespace) -> int:
         "constraints": args.constraints,
         "open_questions": args.open_questions,
         "assumptions": args.assumptions,
+        "task_ids": [],
         "risk_level": args.risk_level,
         "status": "draft",
         "created_at": now(),
         "updated_at": now(),
     }
     for key, value in values.items():
-        if isinstance(value, str):
-            reject_secret(value, key)
+        reject_secret_values(value, key)
     path = plan_path(root, plan_id)
-    if path.exists() and not args.force:
-        raise ValueError(f"plan already exists: {plan_id} (use --force to replace draft)")
+    if path.exists():
+        existing = read_json(path)
+        if not args.force:
+            raise ValueError(f"plan already exists: {plan_id} (use --force to replace draft)")
+        if not isinstance(existing, dict) or existing.get("status") != "draft":
+            raise ValueError("--force can replace draft plans only")
     atomic_write(path, values)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
@@ -130,8 +142,12 @@ def command_task_create(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
-    if not plan_path(root, plan_id).is_file():
+    plan_path_value = plan_path(root, plan_id)
+    if not plan_path_value.is_file():
         raise ValueError(f"plan does not exist: {plan_id}")
+    plan = read_json(plan_path_value)
+    if not isinstance(plan, dict) or plan.get("status") != "draft":
+        raise ValueError("task drafts can be added to draft plans only")
     agent = safe_id(args.agent, "agent") if args.agent else None
     values = {
         "task_id": task_id,
@@ -149,12 +165,22 @@ def command_task_create(args: argparse.Namespace) -> int:
         "updated_at": now(),
     }
     for key, value in values.items():
-        if isinstance(value, str):
-            reject_secret(value, key)
+        reject_secret_values(value, key)
     path = path_for(root, "tasks", task_id)
-    if path.exists() and not args.force:
-        raise ValueError(f"task already exists: {task_id} (use --force to replace)")
+    if path.exists():
+        existing = read_json(path)
+        if not args.force:
+            raise ValueError(f"task already exists: {task_id} (use --force to replace draft)")
+        if not isinstance(existing, dict) or not existing.get("pipeline_managed") or existing.get("task_status") != "planned":
+            raise ValueError("--force can replace pipeline-managed planned tasks only")
     atomic_write(path, values)
+    task_ids = plan.get("task_ids") if isinstance(plan, dict) else None
+    if not isinstance(task_ids, list):
+        task_ids = []
+    if task_id not in task_ids:
+        plan["task_ids"] = [*task_ids, task_id]
+        plan["updated_at"] = now()
+        atomic_write(plan_path_value, plan)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
 
