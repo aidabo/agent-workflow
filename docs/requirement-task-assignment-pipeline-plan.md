@@ -151,8 +151,8 @@ task done:     phase=done / task_status=done / state=done
 割り当て解除、stale、needs_humanは通常の進行と分ける。
 
 - `planned`: taskは作成済みだがagent未割り当て
-- `assigned`: agentとcurrent_task_idが確定したが作業開始前
-- `in_progress`: agentが作業中
+- `assigned`: agentとcurrent_task_idが確定した着手待ち。phase=assigned / task_status=in_progress / state=busy
+- `in_progress`: begin後にphase=codingへ進み、agentが実作業中
 - `stale`: heartbeat期限超過。自動再割り当てしない
 - `needs_human`: 要件・権限・レビュー上限など人の判断が必要
 
