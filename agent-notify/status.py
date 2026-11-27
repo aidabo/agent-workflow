@@ -199,7 +199,9 @@ class ReviewStatus:
     def loop(self) -> None:
         while True:
             columns = shutil.get_terminal_size((120, 24)).columns if sys.stdout.isatty() else 120
-            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()), CR_MAX_WIDTH=str(columns))
+            # Keep the update stamp (" (HH:MM:SS 更新)") after cross-review summary rows.
+            review_width = max(1, columns - 17) if sys.stdout.isatty() else 0
+            env = dict(os.environ, FORCE_COLOR="1", CR_MAX_LINES=str(review_lines_free()), CR_MAX_WIDTH=str(review_width))
             try:
                 res = subprocess.run(["bash", str(CROSS_REVIEW_STATUS)], capture_output=True, text=True,
                                      timeout=120, env=env)
