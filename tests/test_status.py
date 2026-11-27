@@ -15,6 +15,24 @@ from agent_workflow.status import atomic_write, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
+    def test_plan_and_task_draft_commands_create_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test plan", "--requirement", "Do the thing",
+                "--users", "operator", "--risk-level", "low",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Do the thing",
+                "--goal", "The thing works", "--next-action", "Run tests",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-1.json").read_text())
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual(plan["status"], "draft")
+            self.assertEqual(task["task_status"], "planned")
+            self.assertTrue(task["pipeline_managed"])
+
     def test_checkpoint_and_resume_preserve_task_without_changing_status(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]

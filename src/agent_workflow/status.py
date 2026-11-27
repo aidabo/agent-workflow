@@ -55,6 +55,10 @@ def path_for(root: Path, kind: str, identifier: str) -> Path:
     return candidate
 
 
+def plan_path(root: Path, plan_id: str) -> Path:
+    return path_for(root, "plans", plan_id)
+
+
 def read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -88,6 +92,87 @@ def atomic_write(path: Path, value: dict[str, Any]) -> None:
 def reject_secret(value: str | None, label: str) -> None:
     if value and SECRET_VALUE.search(value):
         raise ValueError(f"secret-like value is not allowed in {label}")
+
+
+def command_plan_create(args: argparse.Namespace) -> int:
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    values = {
+        "plan_id": plan_id,
+        "title": args.title,
+        "requirement": args.requirement,
+        "users": args.users,
+        "acceptance_criteria": args.acceptance_criteria,
+        "scope": args.scope,
+        "non_goals": args.non_goals,
+        "constraints": args.constraints,
+        "open_questions": args.open_questions,
+        "assumptions": args.assumptions,
+        "risk_level": args.risk_level,
+        "status": "draft",
+        "created_at": now(),
+        "updated_at": now(),
+    }
+    for key, value in values.items():
+        if isinstance(value, str):
+            reject_secret(value, key)
+    path = plan_path(root, plan_id)
+    if path.exists() and not args.force:
+        raise ValueError(f"plan already exists: {plan_id} (use --force to replace draft)")
+    atomic_write(path, values)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_task_create(args: argparse.Namespace) -> int:
+    task_id = safe_id(args.task_id, "task_id")
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    if not plan_path(root, plan_id).is_file():
+        raise ValueError(f"plan does not exist: {plan_id}")
+    agent = safe_id(args.agent, "agent") if args.agent else None
+    values = {
+        "task_id": task_id,
+        "plan_id": plan_id,
+        "agent": agent,
+        "summary": args.summary,
+        "goal": args.goal,
+        "next_action": args.next_action,
+        "acceptance_criteria": args.acceptance_criteria,
+        "phase": "docs",
+        "state": "idle",
+        "task_status": "planned",
+        "pipeline_managed": True,
+        "created_at": now(),
+        "updated_at": now(),
+    }
+    for key, value in values.items():
+        if isinstance(value, str):
+            reject_secret(value, key)
+    path = path_for(root, "tasks", task_id)
+    if path.exists() and not args.force:
+        raise ValueError(f"task already exists: {task_id} (use --force to replace)")
+    atomic_write(path, values)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_task_list(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    records = []
+    for path in sorted((root / "tasks").glob("*.json")):
+        try:
+            record = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if args.plan_id and record.get("plan_id") != args.plan_id:
+            continue
+        records.append(record)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
 
 
 def validate_enum(value: str | None, values: set[str], label: str) -> None:
@@ -393,6 +478,36 @@ def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--clear-blocked", action="store_true")
 
 
+def plan_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--title", required=True)
+    parser.add_argument("--requirement", required=True)
+    parser.add_argument("--users", action="append", default=[])
+    parser.add_argument("--acceptance-criteria", action="append", default=[])
+    parser.add_argument("--scope", action="append", default=[])
+    parser.add_argument("--non-goals", action="append", default=[])
+    parser.add_argument("--constraints", action="append", default=[])
+    parser.add_argument("--open-questions", action="append", default=[])
+    parser.add_argument("--assumptions", action="append", default=[])
+    parser.add_argument("--risk-level", choices=("low", "medium", "high"), default="medium")
+    parser.add_argument("--force", action="store_true")
+
+
+def task_create_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--task-id", required=True)
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--summary", required=True)
+    parser.add_argument("--goal", required=True)
+    parser.add_argument("--next-action")
+    parser.add_argument("--acceptance-criteria", action="append", default=[])
+    parser.add_argument("--agent")
+    parser.add_argument("--force", action="store_true")
+
+
 def command_status(args: argparse.Namespace) -> int:
     agent = safe_id(args.agent, "agent")
     task_id = safe_id(args.task_id, "task_id")
@@ -521,6 +636,14 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--context-file", required=True)
     context.add_argument("--project")
     context.add_argument("--task-file")
+    plan_create = sub.add_parser("plan-create")
+    plan_parser(plan_create)
+    task_create = sub.add_parser("task-create")
+    task_create_parser(task_create)
+    task_list = sub.add_parser("task-list")
+    task_list.add_argument("--workspace", default=".")
+    task_list.add_argument("--state-root")
+    task_list.add_argument("--plan-id")
     checkpoint = sub.add_parser("checkpoint")
     checkpoint.add_argument("--workspace", default=".")
     checkpoint.add_argument("--state-root")
@@ -541,6 +664,12 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         if args.command == "context":
             return command_context(args)
+        if args.command == "plan-create":
+            return command_plan_create(args)
+        if args.command == "task-create":
+            return command_task_create(args)
+        if args.command == "task-list":
+            return command_task_list(args)
         if args.command == "sweep":
             return command_sweep(args)
         if args.command == "checkpoint":
