@@ -102,6 +102,29 @@ def reject_secret_values(value: Any, label: str) -> None:
             reject_secret_values(item, f"{label}[{index}]")
 
 
+def active_task_owners(root: Path, task_id: str) -> list[str]:
+    owners: list[str] = []
+    for path in sorted((root / "agents").glob("*.json")):
+        try:
+            record = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        active_task_ids = record.get("active_task_ids") if isinstance(record, dict) else None
+        if isinstance(active_task_ids, list) and task_id in active_task_ids:
+            owners.append(str(record.get("agent") or path.stem))
+    return owners
+
+
+def replaceable_task(existing: dict[str, Any], root: Path, task_id: str) -> bool:
+    return (
+        existing.get("pipeline_managed") is True
+        and existing.get("task_status") == "ready"
+        and existing.get("state") == "idle"
+        and not existing.get("agent")
+        and not active_task_owners(root, task_id)
+    )
+
+
 def command_plan_create(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
@@ -132,6 +155,9 @@ def command_plan_create(args: argparse.Namespace) -> int:
             raise ValueError(f"plan already exists: {plan_id} (use --force to replace draft)")
         if not isinstance(existing, dict) or existing.get("status") != "draft":
             raise ValueError("--force can replace draft plans only")
+        existing_task_ids = existing.get("task_ids")
+        if isinstance(existing_task_ids, list):
+            values["task_ids"] = existing_task_ids
     atomic_write(path, values)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
@@ -171,8 +197,17 @@ def command_task_create(args: argparse.Namespace) -> int:
         existing = read_json(path)
         if not args.force:
             raise ValueError(f"task already exists: {task_id} (use --force to replace draft)")
-        if not isinstance(existing, dict) or not existing.get("pipeline_managed") or existing.get("task_status") != "ready":
-            raise ValueError("--force can replace pipeline-managed planned tasks only")
+        if not isinstance(existing, dict) or not replaceable_task(existing, root, task_id):
+            raise ValueError("--force can replace only idle, unassigned pipeline-managed ready tasks")
+    else:
+        existing = None
+    old_plan_id = existing.get("plan_id") if isinstance(existing, dict) else None
+    old_plan_path = plan_path(root, old_plan_id) if old_plan_id and old_plan_id != plan_id else None
+    old_plan = None
+    if old_plan_path is not None:
+        old_plan = read_json(old_plan_path)
+        if not isinstance(old_plan, dict) or old_plan.get("status") != "draft":
+            raise ValueError("--force cannot move a task out of a non-draft plan")
     atomic_write(path, values)
     task_ids = plan.get("task_ids") if isinstance(plan, dict) else None
     if not isinstance(task_ids, list):
@@ -181,6 +216,12 @@ def command_task_create(args: argparse.Namespace) -> int:
         plan["task_ids"] = [*task_ids, task_id]
         plan["updated_at"] = now()
         atomic_write(plan_path_value, plan)
+    if old_plan is not None:
+        old_task_ids = old_plan.get("task_ids")
+        if isinstance(old_task_ids, list) and task_id in old_task_ids:
+            old_plan["task_ids"] = [item for item in old_task_ids if item != task_id]
+            old_plan["updated_at"] = now()
+            atomic_write(old_plan_path, old_plan)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
 

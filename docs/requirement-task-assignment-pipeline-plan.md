@@ -150,7 +150,7 @@ task done:     phase=done / task_status=done / state=done
 `assigned`はphase、`stale`はstate、`ready`/`in_progress`はtask_statusであり、同じ軸の値ではない。
 割り当て解除、stale、needs_humanは通常の進行と分ける。
 
-- `planned`: taskは作成済みだがagent未割り当て
+- `ready`: Phase 1のtask-createで作成された、agent未割り当ての実行準備済みtask。Phase 2以降でplan承認後にassignする
 - `assigned`: agentとcurrent_task_idが確定した着手待ち。phase=assigned / task_status=in_progress / state=busy
 - `in_progress`: begin後にphase=codingへ進み、agentが実作業中
 - `stale`: heartbeat期限超過。自動再割り当てしない
@@ -163,8 +163,8 @@ task done:     phase=done / task_status=done / state=done
 
 ```text
 agent-status plan-create --title "..." --requirement "..."
-agent-status task-create --plan plan-... --task-id task-001 --summary "..." --goal "..."
-agent-status task-list --plan plan-...
+agent-status task-create --plan-id plan-... --task-id task-001 --summary "..." --goal "..."
+agent-status task-list --plan-id plan-...
 agent-status assign --task task-001 --agent codex
 agent-status unassign --task task-001
 agent-status task-show --task task-001
@@ -178,6 +178,9 @@ agent-status task-show --task task-001
 - 同じtaskを複数agentへ割り当てない。複数agentのparallel taskは初期範囲外とする
 - 完了済みtaskは再割り当てしない。再開は新しいtaskまたはresume契約を使う
 - stale taskを自動で別agentへ移さない
+- `plan-create --force` はdraft planだけを置換し、既存の`task_ids`を保持する
+- `task-create --force` はidle・未割り当て・pipeline管理下のready taskだけを置換する。稼働中taskはheartbeatだけでも保護する
+- taskを別planへ移す場合は、移動元と移動先の両方がdraftでなければならない
 - agent indexのcurrent taskとtask JSONのagentが不一致ならmonitorで警告する
 - secret、credential、任意のpane入力はplan/task本文に保存しない
 - plan/taskの削除は初期範囲に入れず、archiveまたはdone保持にする
