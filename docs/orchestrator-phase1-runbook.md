@@ -2,17 +2,17 @@
 
 ## 目的
 
-このrunbookは、要件をOrchestratorへ渡し、plan/taskを確認してからagentへ割り当てるまでの
-人間の操作手順を定義する。Phase 1では、要件・plan・taskの内容を自動生成しても、最終承認と
-割り当ては人が行う。
+このrunbookは、要件をOrchestratorへ渡し、plan/taskを確認するまでの人間の操作手順を定義する。
+assign、current task表示、reconcile、revision実行は後続Phaseの手順であり、Phase 1の完了条件には
+含めない。
 
-> 注意: `plan-create`、`task-create`、`assign`のCLIはPhase 1実装対象であり、現在の`v0.2.0`
+> 注意: `plan-create`、`task-create`はPhase 1で検討するCLIの仮称、`assign`はPhase 2実装予定であり、現在の`v0.2.0`
 > にはまだ存在しない。先に手作業でpaneへ指示して進める場合も、task JSONを正本にする設計は崩さない。
 
 ## 1. 開始前の確認
 
 ```bash
-cd /home/aidabo/work/legacy/11-agent-workflow
+cd <repo-root>/11-agent-workflow
 git status --short --branch
 git tag --points-at HEAD
 ```
@@ -98,7 +98,7 @@ plan承認後、task listを確認する。
 | agent候補 | 必要な技能・repositoryを持つか |
 | 依存関係 | 前taskが終わるまで開始してはいけないtaskが明確か |
 
-割り当ては人が承認する。将来のCLIでは次の操作になる。
+割り当てはPhase 2で人が承認する。将来のCLIでは次の操作になる。
 
 ```bash
 agent-status assign --task-id task-001 --agent codex
@@ -145,7 +145,7 @@ monitorで次を確認する。
 
 - task未登録: agent-status begin/assignの登録状態を確認する
 - stale: 自動再割り当てせず、人が判断する
-- task/index不一致: monitorの警告を確認し、reconcileを使う
+- task/index不一致: monitorの警告を記録する。reconcileはPhase 2以降で実装する
 - 要件不足: work agentに推測させずOrchestratorへ戻す
 
 ## 8. 完了・修正
@@ -176,8 +176,8 @@ task-001 revision=0
 - interviewの質問・回答・未解決事項が成果物になる
 - plan draftを人が確認できる
 - plan/task docsをcross-reviewへ出せる
-- 人がtaskの割り当てを承認できる
-- agentのcurrent taskがmonitorに表示される
-- taskの失敗からrevision taskを作る判断ができる
+- 人がplan/task draftを確認し、assign前の承認判断ができる
+- plan/task docsをcross-reviewへ出せる
+- Phase 2以降のassign/current task/revisionへの引き継ぎ条件が記録される
 - 既存のwork session、cross-review、checkpoint/resumeを壊さない
 

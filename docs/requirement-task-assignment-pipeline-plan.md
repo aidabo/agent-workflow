@@ -141,7 +141,7 @@ current taskを勝手に切り替えない。これに伴うstatus実装と既�
 
 ```text
 plan draft → plan approved → task planned
-task assigned: phase=assigned / task_status=ready / state=idle
+task assigned: phase=assigned / task_status=in_progress / state=busy
 task running:  phase=coding  / task_status=in_progress / state=busy
 task review:   phase=code_review / task_status=ready_for_review / state=waiting_user
 task done:     phase=done / task_status=done / state=done
