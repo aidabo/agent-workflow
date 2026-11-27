@@ -55,6 +55,10 @@ def path_for(root: Path, kind: str, identifier: str) -> Path:
     return candidate
 
 
+def plan_path(root: Path, plan_id: str) -> Path:
+    return path_for(root, "plans", plan_id)
+
+
 def read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -88,6 +92,156 @@ def atomic_write(path: Path, value: dict[str, Any]) -> None:
 def reject_secret(value: str | None, label: str) -> None:
     if value and SECRET_VALUE.search(value):
         raise ValueError(f"secret-like value is not allowed in {label}")
+
+
+def reject_secret_values(value: Any, label: str) -> None:
+    if isinstance(value, str):
+        reject_secret(value, label)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            reject_secret_values(item, f"{label}[{index}]")
+
+
+def active_task_owners(root: Path, task_id: str) -> list[str]:
+    owners: list[str] = []
+    for path in sorted((root / "agents").glob("*.json")):
+        try:
+            record = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        active_task_ids = record.get("active_task_ids") if isinstance(record, dict) else None
+        if isinstance(active_task_ids, list) and task_id in active_task_ids:
+            owners.append(str(record.get("agent") or path.stem))
+    return owners
+
+
+def replaceable_task(existing: dict[str, Any], root: Path, task_id: str) -> bool:
+    return (
+        existing.get("pipeline_managed") is True
+        and existing.get("task_status") == "ready"
+        and existing.get("state") == "idle"
+        and not existing.get("agent")
+        and not active_task_owners(root, task_id)
+    )
+
+
+def command_plan_create(args: argparse.Namespace) -> int:
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    values = {
+        "plan_id": plan_id,
+        "title": args.title,
+        "requirement": args.requirement,
+        "users": args.users,
+        "acceptance_criteria": args.acceptance_criteria,
+        "scope": args.scope,
+        "non_goals": args.non_goals,
+        "constraints": args.constraints,
+        "open_questions": args.open_questions,
+        "assumptions": args.assumptions,
+        "task_ids": [],
+        "risk_level": args.risk_level,
+        "status": "draft",
+        "created_at": now(),
+        "updated_at": now(),
+    }
+    for key, value in values.items():
+        reject_secret_values(value, key)
+    path = plan_path(root, plan_id)
+    if path.exists():
+        existing = read_json(path)
+        if not args.force:
+            raise ValueError(f"plan already exists: {plan_id} (use --force to replace draft)")
+        if not isinstance(existing, dict) or existing.get("status") != "draft":
+            raise ValueError("--force can replace draft plans only")
+        existing_task_ids = existing.get("task_ids")
+        if isinstance(existing_task_ids, list):
+            values["task_ids"] = existing_task_ids
+    atomic_write(path, values)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_task_create(args: argparse.Namespace) -> int:
+    task_id = safe_id(args.task_id, "task_id")
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    plan_path_value = plan_path(root, plan_id)
+    if not plan_path_value.is_file():
+        raise ValueError(f"plan does not exist: {plan_id}")
+    plan = read_json(plan_path_value)
+    if not isinstance(plan, dict) or plan.get("status") != "draft":
+        raise ValueError("task drafts can be added to draft plans only")
+    agent = safe_id(args.agent, "agent") if args.agent else None
+    values = {
+        "task_id": task_id,
+        "plan_id": plan_id,
+        "agent": agent,
+        "summary": args.summary,
+        "goal": args.goal,
+        "next_action": args.next_action,
+        "acceptance_criteria": args.acceptance_criteria,
+        "phase": "docs",
+        "state": "idle",
+        "task_status": "ready",
+        "pipeline_managed": True,
+        "created_at": now(),
+        "updated_at": now(),
+    }
+    for key, value in values.items():
+        reject_secret_values(value, key)
+    path = path_for(root, "tasks", task_id)
+    if path.exists():
+        existing = read_json(path)
+        if not args.force:
+            raise ValueError(f"task already exists: {task_id} (use --force to replace draft)")
+        if not isinstance(existing, dict) or not replaceable_task(existing, root, task_id):
+            raise ValueError("--force can replace only idle, unassigned pipeline-managed ready tasks")
+    else:
+        existing = None
+    old_plan_id = existing.get("plan_id") if isinstance(existing, dict) else None
+    old_plan_path = plan_path(root, old_plan_id) if old_plan_id and old_plan_id != plan_id else None
+    old_plan = None
+    if old_plan_path is not None:
+        old_plan = read_json(old_plan_path)
+        if not isinstance(old_plan, dict) or old_plan.get("status") != "draft":
+            raise ValueError("--force cannot move a task out of a non-draft plan")
+    atomic_write(path, values)
+    task_ids = plan.get("task_ids") if isinstance(plan, dict) else None
+    if not isinstance(task_ids, list):
+        task_ids = []
+    if task_id not in task_ids:
+        plan["task_ids"] = [*task_ids, task_id]
+        plan["updated_at"] = now()
+        atomic_write(plan_path_value, plan)
+    if old_plan is not None:
+        old_task_ids = old_plan.get("task_ids")
+        if isinstance(old_task_ids, list) and task_id in old_task_ids:
+            old_plan["task_ids"] = [item for item in old_task_ids if item != task_id]
+            old_plan["updated_at"] = now()
+            atomic_write(old_plan_path, old_plan)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_task_list(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    records = []
+    for path in sorted((root / "tasks").glob("*.json")):
+        try:
+            record = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        if args.plan_id and record.get("plan_id") != args.plan_id:
+            continue
+        records.append(record)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
 
 
 def validate_enum(value: str | None, values: set[str], label: str) -> None:
@@ -393,6 +547,36 @@ def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--clear-blocked", action="store_true")
 
 
+def plan_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--title", required=True)
+    parser.add_argument("--requirement", required=True)
+    parser.add_argument("--users", action="append", default=[])
+    parser.add_argument("--acceptance-criteria", action="append", default=[])
+    parser.add_argument("--scope", action="append", default=[])
+    parser.add_argument("--non-goals", action="append", default=[])
+    parser.add_argument("--constraints", action="append", default=[])
+    parser.add_argument("--open-questions", action="append", default=[])
+    parser.add_argument("--assumptions", action="append", default=[])
+    parser.add_argument("--risk-level", choices=("low", "medium", "high"), default="medium")
+    parser.add_argument("--force", action="store_true")
+
+
+def task_create_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--task-id", required=True)
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--summary", required=True)
+    parser.add_argument("--goal", required=True)
+    parser.add_argument("--next-action")
+    parser.add_argument("--acceptance-criteria", action="append", default=[])
+    parser.add_argument("--agent")
+    parser.add_argument("--force", action="store_true")
+
+
 def command_status(args: argparse.Namespace) -> int:
     agent = safe_id(args.agent, "agent")
     task_id = safe_id(args.task_id, "task_id")
@@ -521,6 +705,14 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--context-file", required=True)
     context.add_argument("--project")
     context.add_argument("--task-file")
+    plan_create = sub.add_parser("plan-create")
+    plan_parser(plan_create)
+    task_create = sub.add_parser("task-create")
+    task_create_parser(task_create)
+    task_list = sub.add_parser("task-list")
+    task_list.add_argument("--workspace", default=".")
+    task_list.add_argument("--state-root")
+    task_list.add_argument("--plan-id")
     checkpoint = sub.add_parser("checkpoint")
     checkpoint.add_argument("--workspace", default=".")
     checkpoint.add_argument("--state-root")
@@ -541,6 +733,12 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         if args.command == "context":
             return command_context(args)
+        if args.command == "plan-create":
+            return command_plan_create(args)
+        if args.command == "task-create":
+            return command_task_create(args)
+        if args.command == "task-list":
+            return command_task_list(args)
         if args.command == "sweep":
             return command_sweep(args)
         if args.command == "checkpoint":

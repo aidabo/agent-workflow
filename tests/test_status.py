@@ -15,6 +15,88 @@ from agent_workflow.status import atomic_write, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
+    def test_plan_and_task_draft_commands_create_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test plan", "--requirement", "Do the thing",
+                "--users", "operator", "--risk-level", "low",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Do the thing",
+                "--goal", "The thing works", "--next-action", "Run tests",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-1.json").read_text())
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual(plan["status"], "draft")
+            self.assertEqual(plan["task_ids"], ["task-1"])
+            self.assertEqual(task["task_status"], "ready")
+            self.assertTrue(task["pipeline_managed"])
+
+    def test_plan_and_task_drafts_reject_secret_list_and_force_active_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+                "--acceptance-criteria", "sk-secret-value-that-must-not-save",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            self.assertEqual(main([
+                "begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
+                "--phase", "coding",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Reset", "--goal", "Reset", "--force",
+            ]), 2)
+
+    def test_force_preserves_plan_task_ids_and_rejects_heartbeat_active_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            create_plan = [
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]
+            self.assertEqual(main(create_plan), 0)
+            create_task = [
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]
+            self.assertEqual(main(create_task), 0)
+            self.assertEqual(main([*create_plan, "--title", "Revised", "--force"]), 0)
+            plan_path = Path(tmp) / ".agent-workflow/state/plans/plan-1.json"
+            self.assertEqual(json.loads(plan_path.read_text())["task_ids"], ["task-1"])
+            self.assertEqual(main([
+                "heartbeat", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
+            ]), 0)
+            self.assertEqual(main([*create_task, "--summary", "Reset", "--goal", "Reset", "--force"]), 2)
+
+    def test_force_move_updates_plan_task_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for plan_id in ("plan-1", "plan-2"):
+                self.assertEqual(main([
+                    "plan-create", "--workspace", tmp, "--plan-id", plan_id,
+                    "--title", plan_id, "--requirement", "Do thing",
+                ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-2", "--summary", "Moved", "--goal", "New goal", "--force",
+            ]), 0)
+            root = Path(tmp) / ".agent-workflow/state/plans"
+            self.assertEqual(json.loads((root / "plan-1.json").read_text())["task_ids"], [])
+            self.assertEqual(json.loads((root / "plan-2.json").read_text())["task_ids"], ["task-1"])
+
     def test_checkpoint_and_resume_preserve_task_without_changing_status(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
