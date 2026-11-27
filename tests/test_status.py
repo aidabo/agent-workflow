@@ -50,8 +50,7 @@ class StatusTests(unittest.TestCase):
                 "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
             ]), 0)
             self.assertEqual(main([
-                "begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
-                "--phase", "coding",
+                "heartbeat", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
             ]), 0)
             self.assertEqual(main([
                 "task-create", "--workspace", tmp, "--task-id", "task-1",
@@ -128,6 +127,39 @@ class StatusTests(unittest.TestCase):
                              ("codex", "assigned", "busy", "in_progress"))
             self.assertEqual(agent["active_task_ids"], ["task-1"])
             self.assertEqual(agent["current_task_id"], "task-1")
+
+    def test_pipeline_begin_requires_assignment_and_enters_coding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            begin_args = [
+                "begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
+                "--phase", "coding",
+            ]
+            self.assertEqual(main(begin_args), 2)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 0)
+            self.assertEqual(main([
+                "assign", "--workspace", tmp, "--task-id", "task-1", "--agent", "codex",
+            ]), 0)
+            self.assertEqual(main(begin_args), 0)
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual((task["phase"], task["state"], task["task_status"]),
+                             ("coding", "busy", "in_progress"))
+
+    def test_heartbeat_of_another_task_does_not_change_current_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex"]
+            self.assertEqual(main(["begin", *args, "--task-id", "one", "--phase", "coding"]), 0)
+            self.assertEqual(main(["begin", *args, "--task-id", "two", "--phase", "docs"]), 0)
+            self.assertEqual(main(["heartbeat", *args, "--task-id", "one"]), 0)
+            agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
+            self.assertEqual(agent["current_task_id"], "two")
 
     def test_unassign_clears_current_task_but_does_not_unassign_active_work(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -116,6 +116,10 @@ agent: active_task_idsにtask-001、current_task_id=task-001
 
 `pipeline_managed=true`のtaskは、`plan-approve`と`assign`を経てからwork sessionへ渡す。
 
+assign後、work agentは同じtask IDで`begin --phase coding`を実行する。未assignのpipeline taskは
+beginできない。複数taskを同じagentが持つ場合、heartbeat/updateはcurrent taskを勝手に切り替えず、
+切り替えは明示的なassignで行う。
+
 ## 6. Work agentへの引き渡し
 
 Work sessionへ渡す指示は、task IDを必ず含める。

@@ -146,6 +146,14 @@ pipeline管理taskの`assign`は承認済みplanの未着手taskだけを割り�
 plan承認なしでもassignできます。作業開始前の取り消しは`unassign --task-id task-001`、done/stale taskの
 再割り当ては拒否されます。
 
+pipeline管理taskはassign後に次で作業を開始します。未assignのpipeline taskを直接`begin`する操作は拒否されます。
+別taskのheartbeat/updateはagentの`current_task_id`を変更しません。
+
+```bash
+bin/agent-workflow status begin --workspace "$PWD" --agent codex \
+  --task-id task-001 --phase coding
+```
+
 手動で1件のレビューを開始する場合：
 
 ```bash

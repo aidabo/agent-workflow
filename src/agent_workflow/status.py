@@ -869,6 +869,20 @@ def command_status(args: argparse.Namespace) -> int:
     agent_path = path_for(root, "agents", agent)
     previous_task = read_json(task_path)
     previous_agent = read_json(agent_path)
+    if not isinstance(previous_task, dict):
+        previous_task = {}
+    if not isinstance(previous_agent, dict):
+        previous_agent = {}
+    if args.command == "begin" and previous_task.get("pipeline_managed") is True:
+        if previous_task.get("agent") != agent:
+            raise ValueError(f"pipeline task {task_id} must be assigned to {agent} before begin")
+        if previous_task.get("phase") != "assigned":
+            raise ValueError(f"pipeline task {task_id} must be in assigned phase before begin")
+        if args.phase != "coding":
+            raise ValueError("pipeline task begin requires --phase coding")
+        current = previous_agent.get("current_task_id")
+        if current and current != task_id:
+            raise ValueError(f"agent {agent} current task is {current}; assign {task_id} first")
     if args.command == "heartbeat" and args.state is None:
         state = previous_task.get("state") or "busy"
         if state == "stale":
@@ -895,7 +909,7 @@ def command_status(args: argparse.Namespace) -> int:
     else:
         previous_active.add(task_id)
     current_task_id = previous_agent.get("current_task_id")
-    if args.command != "end":
+    if args.command != "end" and (args.command == "begin" or not current_task_id):
         current_task_id = task_id
     elif current_task_id == task_id:
         current_task_id = sorted(previous_active)[-1] if previous_active else None
