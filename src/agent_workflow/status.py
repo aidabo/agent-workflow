@@ -29,6 +29,13 @@ ALLOWED_PHASE_STATUS = {
     "code_human_review": {"ready_for_review"},
     "done": {"done"},
 }
+PIPELINE_PHASE_TRANSITIONS = {
+    "assigned": {"assigned", "coding"},
+    "coding": {"coding", "test", "code_review", "code_human_review"},
+    "test": {"test", "code_review", "code_human_review"},
+    "code_review": {"code_review", "code_human_review"},
+    "code_human_review": {"code_human_review"},
+}
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SECRET_VALUE = re.compile(r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,})")
 
@@ -895,8 +902,11 @@ def command_status(args: argparse.Namespace) -> int:
     if previous_task.get("pipeline_managed") is True and args.command in {"update", "heartbeat", "test", "end"}:
         if previous_task.get("agent") != agent:
             raise ValueError(f"pipeline task {task_id} is assigned to {previous_task.get('agent') or 'nobody'}")
-        if args.phase is not None and args.phase != previous_task.get("phase"):
-            raise ValueError(f"pipeline task {task_id} phase changes require begin or assign")
+        if args.command != "end" and args.phase is not None:
+            previous_phase = previous_task.get("phase")
+            allowed_phases = PIPELINE_PHASE_TRANSITIONS.get(previous_phase, {previous_phase})
+            if args.phase not in allowed_phases:
+                raise ValueError(f"pipeline task {task_id} cannot move from {previous_phase} to {args.phase}")
     if args.command == "heartbeat" and args.state is None:
         state = previous_task.get("state") or "busy"
         if state == "stale":

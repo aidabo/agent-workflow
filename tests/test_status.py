@@ -161,6 +161,9 @@ class StatusTests(unittest.TestCase):
             task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
             self.assertEqual((task["phase"], task["state"], task["task_status"]),
                              ("coding", "busy", "in_progress"))
+            self.assertEqual(main(["end", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]), 0)
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual((task["phase"], task["state"], task["task_status"]), ("done", "done", "done"))
 
     def test_reassign_same_agent_selects_another_assigned_task_as_current(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -193,6 +196,10 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["heartbeat", *args, "--task-id", "one"]), 0)
             agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
             self.assertEqual(agent["current_task_id"], "two")
+            self.assertEqual(main(["begin", *args, "--task-id", "one", "--phase", "coding"]), 0)
+            self.assertEqual(main(["heartbeat", *args, "--task-id", "one"]), 0)
+            agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
+            self.assertEqual(agent["current_task_id"], "one")
             self.assertEqual(main(["end", *args, "--task-id", "two"]), 0)
             self.assertEqual(main(["heartbeat", *args, "--task-id", "one"]), 0)
             agent = json.loads((Path(tmp) / ".agent-workflow/state/agents/codex.json").read_text())
