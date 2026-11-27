@@ -883,6 +883,11 @@ def command_status(args: argparse.Namespace) -> int:
         current = previous_agent.get("current_task_id")
         if current and current != task_id:
             raise ValueError(f"agent {agent} current task is {current}; assign {task_id} first")
+    if previous_task.get("pipeline_managed") is True and args.command in {"update", "heartbeat", "test", "end"}:
+        if previous_task.get("agent") != agent:
+            raise ValueError(f"pipeline task {task_id} is assigned to {previous_task.get('agent') or 'nobody'}")
+        if args.phase is not None and args.phase != previous_task.get("phase"):
+            raise ValueError(f"pipeline task {task_id} phase changes require begin or assign")
     if args.command == "heartbeat" and args.state is None:
         state = previous_task.get("state") or "busy"
         if state == "stale":
@@ -909,12 +914,17 @@ def command_status(args: argparse.Namespace) -> int:
     else:
         previous_active.add(task_id)
     current_task_id = previous_agent.get("current_task_id")
-    if args.command != "end" and (args.command == "begin" or not current_task_id):
+    if args.command == "end":
+        if current_task_id == task_id:
+            current_task_id = sorted(previous_active)[-1] if previous_active else None
+        elif current_task_id not in previous_active:
+            current_task_id = sorted(previous_active)[-1] if previous_active else None
+    elif args.command == "begin" and previous_task.get("pipeline_managed") is not True:
         current_task_id = task_id
-    elif current_task_id == task_id:
-        current_task_id = sorted(previous_active)[-1] if previous_active else None
+    elif current_task_id is None:
+        current_task_id = task_id
     elif current_task_id not in previous_active:
-        current_task_id = sorted(previous_active)[-1] if previous_active else None
+        current_task_id = sorted(previous_active)[-1] if previous_active else task_id
     agent_updates = {
         "agent": agent, "active_task_ids": sorted(previous_active), "current_task_id": current_task_id,
         "heartbeat_at": timestamp, "updated_at": timestamp,
