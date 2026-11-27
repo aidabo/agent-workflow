@@ -166,8 +166,8 @@ agent-status plan-create --title "..." --requirement "..."
 agent-status task-create --plan-id plan-... --task-id task-001 --summary "..." --goal "..."
 agent-status task-list --plan-id plan-...
 agent-status plan-approve --plan-id plan-...
-agent-status assign --task task-001 --agent codex
-agent-status unassign --task task-001
+agent-status assign --task-id task-001 --agent codex
+agent-status unassign --task-id task-001
 agent-status task-show --task task-001
 ```
 

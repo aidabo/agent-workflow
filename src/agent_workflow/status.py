@@ -126,7 +126,7 @@ def replaceable_task(existing: dict[str, Any], root: Path, task_id: str) -> bool
     )
 
 
-def command_plan_create(args: argparse.Namespace) -> int:
+def _command_plan_create_impl(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
@@ -164,7 +164,7 @@ def command_plan_create(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_task_create(args: argparse.Namespace) -> int:
+def _command_task_create_impl(args: argparse.Namespace) -> int:
     task_id = safe_id(args.task_id, "task_id")
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
@@ -305,6 +305,8 @@ def command_plan_approve(args: argparse.Namespace) -> int:
         task_ids = plan.get("task_ids")
         if not isinstance(task_ids, list):
             raise ValueError(f"plan {plan_id} has invalid task_ids")
+        if not task_ids:
+            raise ValueError(f"plan {plan_id} has no tasks to approve")
         for task_id in task_ids:
             if not isinstance(task_id, str) or not SAFE_ID.fullmatch(task_id):
                 raise ValueError(f"plan {plan_id} has invalid task_id")
@@ -437,12 +439,22 @@ def command_reconcile(args: argparse.Namespace) -> int:
             owner = task.get("agent") if isinstance(task.get("agent"), str) else None
             if owner and owner not in agents:
                 agents[owner] = {"agent": owner}
-            if not owner and len(owners) == 1 and task.get("state") != "done":
+            can_restore_pipeline_owner = (
+                task.get("pipeline_managed") is not True
+                or (
+                    task.get("phase") == "assigned"
+                    and task.get("state") == "busy"
+                    and task.get("task_status") == "in_progress"
+                )
+            )
+            if not owner and len(owners) == 1 and task.get("state") != "done" and can_restore_pipeline_owner:
                 owner = owners[0]
                 task["agent"] = owner
                 task["updated_at"] = now()
                 write_assignment_record(path_for(root, "tasks", task_id), task)
                 changed_tasks.append(task_id)
+            elif not owner and len(owners) == 1 and not can_restore_pipeline_owner:
+                warnings.append(f"task {task_id} keeps task-side unassignment; removing stale index owner {owners[0]}")
             if len(owners) > 1 and not owner:
                 warnings.append(f"task {task_id} has multiple indexed owners: {', '.join(owners)}")
         desired: dict[str, list[str]] = {name: [] for name in agents}
@@ -463,6 +475,20 @@ def command_reconcile(args: argparse.Namespace) -> int:
     result = {"changed_tasks": sorted(set(changed_tasks)), "changed_agents": sorted(set(changed_agents)), "warnings": warnings}
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
+
+
+def command_plan_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_plan_create_impl(args)
+
+
+def command_task_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_task_create_impl(args)
 
 
 def validate_enum(value: str | None, values: set[str], label: str) -> None:
