@@ -111,6 +111,12 @@ class StatusTests(unittest.TestCase):
                 "assign", "--workspace", tmp, "--task-id", "task-1", "--agent", "codex",
             ]
             self.assertEqual(main(assign_args), 2)
+            root = Path(tmp) / ".agent-workflow/state"
+            atomic_write(root / "agents/claude.json", {
+                "agent": "claude", "active_task_ids": ["task-1"], "current_task_id": "task-1",
+            })
+            self.assertEqual(main(assign_args), 2)
+            (root / "agents/claude.json").unlink()
             self.assertEqual(main([
                 "plan-approve", "--workspace", tmp, "--plan-id", "plan-1",
             ]), 0)

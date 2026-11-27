@@ -248,6 +248,10 @@ def command_task_list(args: argparse.Namespace) -> int:
 @contextmanager
 def assignment_lock(root: Path):
     root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
+    if root.parent.name == ".agent-workflow":
+        root.parent.mkdir(parents=True, exist_ok=True)
+        root.parent.chmod(0o700)
     lock_path = root / "assignment.lock"
     with open(lock_path, "a+", encoding="utf-8") as lock_stream:
         os.chmod(lock_path, 0o600)
@@ -334,6 +338,9 @@ def command_assign(args: argparse.Namespace) -> int:
         existing_agent = task.get("agent")
         if existing_agent and existing_agent != agent:
             raise ValueError(f"task {task_id} is already assigned to {existing_agent}")
+        indexed_owners = active_task_owners(root, task_id)
+        if any(owner != agent for owner in indexed_owners):
+            raise ValueError(f"task {task_id} is already indexed by {', '.join(indexed_owners)}")
         if task.get("pipeline_managed") is True:
             plan_id = task.get("plan_id")
             plan = read_object(plan_path(root, plan_id), "plan") if isinstance(plan_id, str) else {}

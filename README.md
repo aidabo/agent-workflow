@@ -142,8 +142,9 @@ bin/agent-workflow status assign --workspace "$PWD" --task-id task-001 --agent c
 bin/agent-workflow status reconcile --workspace "$PWD"
 ```
 
-`assign`は承認済みplanの未着手taskだけを割り当てます。作業開始前の取り消しは
-`unassign --task-id task-001`、done/stale taskの再割り当ては拒否されます。
+pipeline管理taskの`assign`は承認済みplanの未着手taskだけを割り当てます。legacy taskは既存互換のため
+plan承認なしでもassignできます。作業開始前の取り消しは`unassign --task-id task-001`、done/stale taskの
+再割り当ては拒否されます。
 
 手動で1件のレビューを開始する場合：
 
