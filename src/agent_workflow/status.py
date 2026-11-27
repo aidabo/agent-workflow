@@ -341,12 +341,21 @@ def command_assign(args: argparse.Namespace) -> int:
         indexed_owners = active_task_owners(root, task_id)
         if any(owner != agent for owner in indexed_owners):
             raise ValueError(f"task {task_id} is already indexed by {', '.join(indexed_owners)}")
+        same_assigned_task = (
+            existing_agent == agent
+            and task.get("phase") == "assigned"
+            and task.get("state") == "busy"
+            and task.get("task_status") == "in_progress"
+        )
         if task.get("pipeline_managed") is True:
             plan_id = task.get("plan_id")
             plan = read_object(plan_path(root, plan_id), "plan") if isinstance(plan_id, str) else {}
             if plan.get("status") != "approved":
                 raise ValueError(f"plan {plan_id} must be approved before assigning tasks")
-        if task.get("state") not in {None, "idle"} or task.get("task_status") not in {None, "planned", "ready"}:
+        if not same_assigned_task and (
+            task.get("state") not in {None, "idle"}
+            or task.get("task_status") not in {None, "planned", "ready"}
+        ):
             raise ValueError(f"task {task_id} is not waiting for assignment")
         agent_record = read_json(agent_path)
         if not isinstance(agent_record, dict):
@@ -908,7 +917,7 @@ def command_status(args: argparse.Namespace) -> int:
         "last_event": args.event, "blocked_reason": args.blocked_reason, "heartbeat_at": timestamp,
         "updated_at": timestamp,
     }
-    previous_active = set(previous_agent.get("active_task_ids", []))
+    previous_active = set(active_ids(previous_agent))
     if args.command == "end":
         previous_active.discard(task_id)
     else:

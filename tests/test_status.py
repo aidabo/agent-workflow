@@ -162,6 +162,29 @@ class StatusTests(unittest.TestCase):
             self.assertEqual((task["phase"], task["state"], task["task_status"]),
                              ("coding", "busy", "in_progress"))
 
+    def test_reassign_same_agent_selects_another_assigned_task_as_current(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            for task_id in ("one", "two"):
+                self.assertEqual(main([
+                    "task-create", "--workspace", tmp, "--task-id", task_id,
+                    "--plan-id", "plan-1", "--summary", task_id, "--goal", task_id,
+                ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 0)
+            for task_id in ("one", "two"):
+                self.assertEqual(main([
+                    "assign", "--workspace", tmp, "--task-id", task_id, "--agent", "codex",
+                ]), 0)
+            root = Path(tmp) / ".agent-workflow/state"
+            self.assertEqual(main([
+                "assign", "--workspace", tmp, "--task-id", "one", "--agent", "codex",
+            ]), 0)
+            agent = json.loads((root / "agents/codex.json").read_text())
+            self.assertEqual(agent["current_task_id"], "one")
+
     def test_heartbeat_of_another_task_does_not_change_current_task(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex"]
