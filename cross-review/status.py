@@ -475,12 +475,13 @@ def main() -> int:
     counts = {k: sum(1 for i in open_items if i["key"] == k) for k in OPEN_ORDER}
     summary = " · ".join(f"{STATES[k][1]}{counts[k]} {STATES[k][0].lower()}{RESET}"
                          for k in OPEN_ORDER if counts[k] and k != "skipped")
-    print(f"{BOLD}{CYAN}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}")
+    max_width = int(os.environ.get("CR_MAX_WIDTH") or 0)
+    summary_line = f"{BOLD}{CYAN}cross-review{RESET}  {summary or DIM + 'no open PRs' + RESET}"
+    print(truncate_ansi(summary_line, max_width) if max_width and width(summary_line) > max_width else summary_line)
     if not repos:
         print(f"  {YELLOW}対象リポジトリがありません（config.local.sh の REPOS）{RESET}")
     print(*errors, sep="\n") if errors else None
     print(f" {BOLD}Open{RESET}")
-    max_width = int(os.environ.get("CR_MAX_WIDTH") or 0)
     print("\n".join(render_line(i, repo_w, max_width) for i in open_items) or f"  {DIM}none{RESET}")
     print(f" {BOLD}Done{RESET} {DIM}(last {done_days:g} days · {len(done_items)}){RESET}")
     # Done gets whatever height is left: the board passes its free lines in CR_MAX_LINES
