@@ -416,6 +416,14 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "busy"]), 2)
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "waiting_user"]), 0)
 
+    def test_review_evidence_is_recorded_on_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
+            self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
+            self.assertEqual(main(["update", *args, "--review-status", "changes_requested", "--review-summary", "Fix test"]), 0)
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
+            self.assertEqual(task["review"], {"status": "changes_requested", "summary": "Fix test", "updated_at": task["review"]["updated_at"]})
+
     def test_heartbeat_preserves_human_state_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main(["begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1", "--phase", "docs_human_review", "--task-status", "ready_for_review", "--state", "waiting_user"]), 0)
