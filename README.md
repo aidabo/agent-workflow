@@ -100,7 +100,7 @@ application repositoryのpackage.jsonから呼ぶ場合は、次のようにし�
 完了条件、test、PR、review条件もtaskごとに決めてください。
 ```
 
-現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。plan承認後の明示assignとreconcileは利用できます。AI orchestratorのinterview/planner/critic/verifierは次Phaseで実装します。
+現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。plan承認後の明示assignとreconcileは利用できます。AI orchestratorのinterview/planner/critic/verifierは次Phaseで実装します（[AI Orchestrator Phase plan](docs/orchestrator-ai-phase-plan.md)）。
 
 task状態の例：
 

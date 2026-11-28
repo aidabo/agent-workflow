@@ -19,7 +19,7 @@ flowchart LR
   S --> W[work session]
   W --> E[test / PR / cross-review]
   E -->|verification failed| X[revision-create]
-  X --> C
+  X --> S
 ```
 
 ## session責務
@@ -81,12 +81,13 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 
 ## 承認・安全境界
 
-- `open_questions`が残る場合、orchestratorは勝手に仮定を確定しない
-- Critic/Verifierの指摘が未解決ならplanをapprovedにしない
-- plan-approveは人の明示操作
-- assignはapproved planの未着手taskだけ
-- paneへの強制入力、自動merge、自動deployは対象外
-- verification failedは元taskを上書きせず`revision-create`へ渡す
+- **既存**: `open_questions`が残る場合、orchestratorは勝手に仮定を確定しない
+- **Phase実装予定**: Critic/Verifierの指摘が未解決ならplanをapprovedにしない
+- **既存**: plan-approveは人の明示操作
+- **既存**: pipeline管理taskのassignはapproved planの未着手taskだけに限定される
+- **既存**: paneへの強制入力、自動merge、自動deployは対象外
+- **既存**: verification failedは元taskを上書きせず`revision-create`へ渡す
+- **Phase実装予定**: revision-create後にCritic/Verifierを再実行するゲートを追加する。現行CLIはrevision taskをapproved planへ追加し、既存assignへ渡す。
 
 ## 実装段階
 
