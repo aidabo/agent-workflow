@@ -152,8 +152,9 @@ AI orchestratorのfixture運用例：
 
 ```bash
 # answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
-bin/agent-workflow status requirement-interview --workspace "$PWD" \
-  --requirement-id req-001 --input answers.json --interview-mode full
+bin/agent-workflow status requirement-create --workspace "$PWD" \
+  --requirement-id req-001 --background "背景" --problem "困りごと" \
+  --desired-outcome "期待結果" --acceptance-criteria "完了条件"
 bin/agent-workflow status planner-fixture --workspace "$PWD" \
   --requirement-id req-001 --plan-id plan-001 --input planner.json
 bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
@@ -161,9 +162,10 @@ bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
 # findingsを解消した後、明示的にクリアして承認へ進める
 bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
   --review-status approved --clear-findings
+bin/agent-workflow status plan-approve --workspace "$PWD" --plan-id plan-001
 ```
 
-このfixtureはprovider非依存のdraft生成で、LLM呼び出し・自動assign・pane入力は行いません。
+このfixtureはprovider非依存のdraft生成で、LLM呼び出し・自動assign・pane入力は行いません。`planner.json`はworkspace相対で、空でない`tasks`配列（`task_id`/`summary`/`goal`）が必要です。
 
 pipeline管理taskの`assign`は承認済みplanの未着手taskだけを割り当てます。legacy taskは既存互換のため
 plan承認なしでもassignできます。作業開始前の取り消しは`unassign --task-id task-001`、done/stale taskの
