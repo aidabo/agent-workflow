@@ -98,6 +98,7 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 - docs pathはworkspace内に限定し、一覧が大きい場合は上限とwarningを返す
 
 この結果はproviderへ渡す前提情報であり、state・product code・taskを変更しない。secretや会話全文をpreflight artifactとして保存しない。
+出力の`schema_version`は1から始め、provider adapterが互換性を判断できるよう、キー構造を変更するときはversionを上げる。
 
 ## 承認・安全境界
 

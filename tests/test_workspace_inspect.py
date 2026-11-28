@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -64,6 +65,49 @@ class WorkspaceInspectTests(unittest.TestCase):
             result = json.loads(output.getvalue())
             self.assertEqual(result["docs"]["file_count"], 0)
             self.assertTrue(any("docs directory does not exist" in warning for warning in result["warnings"]))
+
+    def test_max_files_reports_only_when_another_regular_file_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp) / "docs"
+            (docs / "a").mkdir(parents=True)
+            (docs / "b").mkdir()
+            (docs / "a" / "one.md").write_text("# One\n")
+            (docs / "b" / "two.md").write_text("# Two\n")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["workspace-inspect", "--workspace", tmp, "--max-files", "1"]), 0)
+            limited = json.loads(output.getvalue())
+            self.assertTrue(limited["docs"]["truncated"])
+            self.assertTrue(any("truncated" in warning for warning in limited["warnings"]))
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["workspace-inspect", "--workspace", tmp, "--max-files", "2"]), 0)
+            exact = json.loads(output.getvalue())
+            self.assertFalse(exact["docs"]["truncated"])
+
+    def test_skips_symlinked_files_and_directories(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside:
+            docs = Path(tmp) / "docs"
+            docs.mkdir()
+            (Path(outside) / "secret.md").write_text("# Outside\n")
+            try:
+                os.symlink(Path(outside) / "secret.md", docs / "linked.md")
+                os.symlink(outside, docs / "linked-dir")
+            except OSError:
+                self.skipTest("symlinks are unavailable")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["workspace-inspect", "--workspace", tmp]), 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["docs"]["file_count"], 0)
+
+    def test_rejects_docs_file_as_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs.txt").write_text("not a directory")
+            self.assertEqual(main([
+                "workspace-inspect", "--workspace", tmp, "--docs-dir", "docs.txt",
+            ]), 2)
 
 
 if __name__ == "__main__":

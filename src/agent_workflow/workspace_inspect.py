@@ -21,15 +21,17 @@ def _relative_files(root: Path, limit: int) -> tuple[list[Path], bool]:
     for current, directories, names in os.walk(root, topdown=True, followlinks=False):
         directories[:] = sorted(
             name for name in directories
-            if name not in SKIP_DIRS and not name.startswith(".")
+            if name not in SKIP_DIRS
+            and not name.startswith(".")
+            and not (Path(current) / name).is_symlink()
         )
         for name in sorted(names):
             path = Path(current) / name
-            if path.is_symlink():
+            if path.is_symlink() or not path.is_file():
                 continue
-            files.append(path)
             if len(files) >= limit:
-                return files, any(True for _ in names[names.index(name) + 1:]) or bool(directories)
+                return files, True
+            files.append(path)
     return files, False
 
 
