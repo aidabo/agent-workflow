@@ -243,13 +243,26 @@ class StatusTests(unittest.TestCase):
             with self.subTest(secret_name=secret_name), tempfile.TemporaryDirectory() as tmp:
                 answers = Path(tmp) / "answers.json"
                 answers.write_text(json.dumps({
-                    "background": "B", "problem": f"{secret_name}=value",
+                    "background": "B", "problem": f"{secret_name}=" + "A" * 20,
                     "desired_outcome": "O", "acceptance_criteria": ["C"],
                 }))
                 self.assertEqual(main([
                     "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
                     "--input", "answers.json",
                 ]), 2)
+
+    def test_requirement_interview_accepts_secret_terms_in_specifications(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "P", "desired_outcome": "O",
+                "constraints": ["password: 8文字以上", "token: 24時間で失効"],
+                "acceptance_criteria": ["C"],
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json",
+            ]), 0)
 
     def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
         with tempfile.TemporaryDirectory() as tmp:
