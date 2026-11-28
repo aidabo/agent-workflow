@@ -198,6 +198,80 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(args), 0)
             self.assertEqual(main(args), 2)
 
+    def test_requirement_interview_converts_answer_fixture_to_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "P", "desired_outcome": "O",
+                "users": ["operator"], "acceptance_criteria": ["C"],
+                "open_questions": [], "risk_level": "low",
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json", "--interview-mode", "full", "--round", "2",
+            ]), 0)
+            record = json.loads((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").read_text())
+            self.assertEqual((record["status"], record["interview"]["mode"], record["interview"]["round"]), ("clarified", "full", 2))
+
+    def test_requirement_interview_rejects_invalid_risk_level(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "P", "desired_outcome": "O",
+                "acceptance_criteria": ["C"], "risk_level": "critical",
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json",
+            ]), 2)
+
+    def test_requirement_interview_rejects_secret_like_answers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "github_pat_" + "A" * 30,
+                "desired_outcome": "O", "acceptance_criteria": ["C"],
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").exists())
+
+    def test_requirement_interview_rejects_environment_style_secret_names(self):
+        for secret_name, value in (
+            ("AWS_SECRET_ACCESS_KEY", "A" * 20),
+            ("SECRET_KEY", "dummy"),
+            ("client_secret", "A" * 20),
+            ("DB_PASSWORD", "dummy"),
+            ("TOKEN", "'dummy!pass'"),
+        ):
+            with self.subTest(secret_name=secret_name), tempfile.TemporaryDirectory() as tmp:
+                answers = Path(tmp) / "answers.json"
+                answers.write_text(json.dumps({
+                    "background": "B", "problem": f"{secret_name}={value}",
+                    "desired_outcome": "O", "acceptance_criteria": ["C"],
+                }))
+                self.assertEqual(main([
+                    "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                    "--input", "answers.json",
+                ]), 2)
+
+    def test_requirement_interview_accepts_secret_terms_in_specifications(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "P", "desired_outcome": "O",
+                "constraints": ["password: 8文字以上", "token: 24時間で失効"],
+                "acceptance_criteria": ["C"],
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json",
+            ]), 0)
+            record = json.loads((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").read_text())
+            self.assertEqual(record["constraints"], ["password: 8文字以上", "token: 24時間で失効"])
+
     def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [
