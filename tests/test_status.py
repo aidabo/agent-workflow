@@ -225,6 +225,19 @@ class StatusTests(unittest.TestCase):
                 "--input", "answers.json",
             ]), 2)
 
+    def test_requirement_interview_rejects_secret_like_answers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            answers = Path(tmp) / "answers.json"
+            answers.write_text(json.dumps({
+                "background": "B", "problem": "github_pat_" + "A" * 30,
+                "desired_outcome": "O", "acceptance_criteria": ["C"],
+            }))
+            self.assertEqual(main([
+                "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                "--input", "answers.json",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").exists())
+
     def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [

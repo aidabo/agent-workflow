@@ -32,7 +32,13 @@ ALLOWED_PHASE_STATUS = {
     "done": {"done"},
 }
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
-SECRET_VALUE = re.compile(r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,})")
+SECRET_VALUE = re.compile(
+    r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|"
+    r"(?:gh[pousr]|github_pat|xox[baprs])_[A-Za-z0-9_-]{20,}|"
+    r"https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,}|"
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----|"
+    r"(?i:\b(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+))"
+)
 
 
 def now() -> str:
