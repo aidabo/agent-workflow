@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .agent-workflow/
+orchestrator-findings/
 .agent-tools/
 .behavior-lock/
 .coverage

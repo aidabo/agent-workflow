@@ -18,4 +18,14 @@ DeepSeekはCLI commandを固定せず、`AGENT_WORKFLOW_DEEPSEEK_COMMAND`に利�
 
 Claude wrapperは`--restricted`、`--strict-mcp-config`、`--setting-sources ""`で起動し、OAuth認証を維持しながらsettings/hooks/MCPの影響を抑える。Codexは`-s read-only`で起動する。どちらも非対話で、promptはargvではなくstdinへ渡す。providerが返すJSONは、runner側でschema・secretを再検証してから`--output`へ保存する。runnerはwrapperより5秒長いtimeoutを持ち、wrapperはprovider専用process groupを終了する。`--timeout`は6秒以上にする（例: 300秒ならwrapperは295秒）。DeepSeek launcherは可能なら`exec`で本体を置き換える。
 
-現状のrunnerは通常のinterview/plan/critic/verifierを1回につき1 provider・1 outputで実行する。複数critic/verifierのfan-out、provider名・operation・preflightの`git.head`を持つfindings集約、相違時の`needs_human`停止は次Phase（未実装）である。現状は各resultを個別に保存し、人が`plan-review --critic-finding/--verifier-finding`へ記録する。providerのresult同士を直接上書きしない。
+現状のrunnerは通常のinterview/plan/critic/verifierを1回につき1 provider・1 outputで実行する。複数critic/verifierのfan-outは下記の`orchestrator fanout`で実装済みであり、provider名・operation・preflightの`git.head`を持つfindingsを集約する。providerのresult同士を直接上書きせず、相違は`needs_human`へ止める。
+
+runtime fan-outはcritic/verifier専用で、次のように実行する。
+
+```bash
+bin/agent-workflow orchestrator fanout critic --workspace "$PWD" \
+  --provider claude --provider codex --provider deepseek \
+  --config providers.json --input plan.json
+```
+
+出力は`orchestrator-findings/critic-findings.json`に0600で保存される。各findingにはprovider、operation、preflightのgit HEADが含まれ、成功時は`result`、失敗時は`error`を持つ。全providerのresultが一致してもstatusは`pending`（自動approve/assignはしない）で、result不一致、provider失敗、実行中のHEAD変更がある場合は`needs_human`になる。

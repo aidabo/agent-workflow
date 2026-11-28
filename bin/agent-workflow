@@ -17,6 +17,8 @@ commands:
   status      read or update task status metadata
   orchestrator run
               run a configured provider with preflight context
+  orchestrator fanout
+              run multiple critic/verifier providers and aggregate findings
   checkpoint  save a durable checkpoint for a task
   checkpoint prune  list/delete old completed-task checkpoints (--older-than 30d [--apply])
   resume      list unfinished tasks and resume prompts
@@ -67,7 +69,11 @@ case "$command_name" in
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
   orchestrator)
-    [[ "${1:-}" == "run" ]] || { echo "usage: bin/agent-workflow orchestrator run ..." >&2; exit 64; }
+    if [[ "${1:-}" == "fanout" ]]; then
+      shift
+      exec "$root/bin/agent-orchestrator-fanout" "$@"
+    fi
+    [[ "${1:-}" == "run" ]] || { echo "usage: bin/agent-workflow orchestrator {run|fanout} ..." >&2; exit 64; }
     shift
     exec "$root/bin/agent-orchestrator" "$@" ;;
   checkpoint)
