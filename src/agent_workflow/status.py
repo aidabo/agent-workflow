@@ -19,6 +19,7 @@ PHASES = {
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
 REVIEW_STATUSES = {"pending", "approved", "changes_requested", "needs_you"}
+PLAN_REVIEW_STATUSES = {"pending", "approved", "changes_requested", "needs_human"}
 ALLOWED_PHASE_STATUS = {
     "docs": {"planned", "ready", "in_progress", "ready_for_review"},
     "docs_review": {"in_progress", "ready_for_review"},
@@ -179,6 +180,12 @@ def _command_plan_create_impl(args: argparse.Namespace) -> int:
         existing_task_ids = existing.get("task_ids")
         if isinstance(existing_task_ids, list):
             values["task_ids"] = existing_task_ids
+        if "ai_review" in existing:
+            existing_review = existing["ai_review"]
+            if isinstance(existing_review, dict):
+                values["ai_review"] = {**existing_review, "status": "pending", "updated_at": now()}
+            else:
+                raise ValueError("cannot replace a plan with malformed ai_review")
     atomic_write(path, values)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
@@ -274,15 +281,31 @@ def command_plan_review(args: argparse.Namespace) -> int:
         plan = read_object(path, "plan")
         if plan.get("status") != "draft":
             raise ValueError("plan-review can update draft plans only")
-        findings = [*args.critic_finding, *args.verifier_finding]
-        if args.review_status == "approved" and findings:
-            raise ValueError("a plan with findings cannot be marked approved")
         reject_secret_values(args.critic_finding, "critic_finding")
         reject_secret_values(args.verifier_finding, "verifier_finding")
+        if args.clear_findings and (args.critic_finding or args.verifier_finding):
+            raise ValueError("--clear-findings cannot be combined with new findings")
+        if args.review_status == "approved" and (args.critic_finding or args.verifier_finding):
+            raise ValueError("approved review cannot include new findings; use --clear-findings after resolution")
+        raw_previous = plan.get("ai_review")
+        if raw_previous is not None and not isinstance(raw_previous, dict):
+            raise ValueError("plan has malformed ai_review")
+        previous = raw_previous if isinstance(raw_previous, dict) else {}
+        for key in ("critic_findings", "verifier_findings"):
+            if key in previous and (not isinstance(previous[key], list) or not all(isinstance(item, str) for item in previous[key])):
+                raise ValueError(f"plan has malformed ai_review.{key}")
+        if args.clear_findings:
+            critic_findings = []
+            verifier_findings = []
+        else:
+            critic_findings = args.critic_finding if args.critic_finding is not None else previous.get("critic_findings", [])
+            verifier_findings = args.verifier_finding if args.verifier_finding is not None else previous.get("verifier_findings", [])
+        if args.review_status == "approved" and [*critic_findings, *verifier_findings]:
+            raise ValueError("clear findings with --clear-findings before approving the plan")
         plan["ai_review"] = {
             "status": args.review_status,
-            "critic_findings": args.critic_finding,
-            "verifier_findings": args.verifier_finding,
+            "critic_findings": critic_findings,
+            "verifier_findings": verifier_findings,
             "updated_at": now(),
         }
         plan["updated_at"] = now()
@@ -529,6 +552,11 @@ def command_plan_approve(args: argparse.Namespace) -> int:
         plan = read_object(path, "plan")
         if plan.get("status") != "draft":
             raise ValueError(f"plan {plan_id} is not draft: {plan.get('status')}")
+        ai_review = plan.get("ai_review")
+        if ai_review is not None and not isinstance(ai_review, dict):
+            raise ValueError(f"plan {plan_id} has malformed ai_review")
+        if isinstance(ai_review, dict) and ai_review.get("status") != "approved":
+            raise ValueError(f"plan {plan_id} AI review is not approved: {ai_review.get('status', 'missing')}")
         task_ids = plan.get("task_ids")
         if not isinstance(task_ids, list):
             raise ValueError(f"plan {plan_id} has invalid task_ids")
@@ -1134,9 +1162,10 @@ def plan_review_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
     parser.add_argument("--plan-id", required=True)
-    parser.add_argument("--review-status", choices=("pending", "approved", "changes_requested", "needs_human"), default="pending")
-    parser.add_argument("--critic-finding", action="append", default=[])
-    parser.add_argument("--verifier-finding", action="append", default=[])
+    parser.add_argument("--review-status", choices=sorted(PLAN_REVIEW_STATUSES), default="pending")
+    parser.add_argument("--critic-finding", action="append")
+    parser.add_argument("--verifier-finding", action="append")
+    parser.add_argument("--clear-findings", action="store_true")
 
 
 def command_status(args: argparse.Namespace) -> int:

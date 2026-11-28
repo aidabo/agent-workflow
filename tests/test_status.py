@@ -86,6 +86,10 @@ class StatusTests(unittest.TestCase):
                 "--title", "Plan", "--requirement", "Requirement",
             ]), 0)
             self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1", "--plan-id", "plan-1",
+                "--summary", "Work", "--goal", "Done",
+            ]), 0)
+            self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1",
                 "--review-status", "changes_requested", "--critic-finding", "Scope too broad",
                 "--verifier-finding", "Missing test evidence",
@@ -94,6 +98,32 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(plan["status"], "draft")
             self.assertEqual(plan["ai_review"]["critic_findings"], ["Scope too broad"])
             self.assertEqual(plan["ai_review"]["verifier_findings"], ["Missing test evidence"])
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "changes_requested",
+                "--clear-findings", "--critic-finding", "new finding",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+                "--critic-finding", "new finding",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+                "--clear-findings",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1", "--title", "Revised",
+                "--requirement", "Changed", "--force",
+            ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+                "--clear-findings",
+            ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 0)
 
     def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
