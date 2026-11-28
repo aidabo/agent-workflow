@@ -56,7 +56,7 @@ REPOS=(
 | `agent` | `check`後にtmuxのagent paneを起動する | 毎日の作業開始 |
 | `monitor` | agent/task/cross-reviewの監視画面を開く | 作業状況の確認 |
 | `status` | taskのbegin、heartbeat、test、context、endを操作する | agentがtask状態を更新するとき |
-| `checkpoint` | taskの再開情報を保存する | 作業中の重要イベント、停止前 |
+| `checkpoint` | taskの再開情報（review結果を含む）を保存する | 作業中の重要イベント、停止前 |
 | `checkpoint prune` | 古い完了taskのcheckpoint候補を表示・削除する | サイズ整理（既定dry-run） |
 | `resume` | 未完了taskとresume promptをJSONで表示する | tmux/マシン再起動後 |
 | `review` | standalone cross-review wrapperを呼び出す | 1件のPRを手動でレビューするとき |

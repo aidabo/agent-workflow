@@ -624,7 +624,7 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
                 continue
             if key == "review" and isinstance(value, dict):
                 previous_review = record.get("review") if isinstance(record.get("review"), dict) else {}
-                merged_review = {**previous_review, **{k: v for k, v in value.items() if v is not None}}
+                merged_review = {"status": "pending", **previous_review, **{k: v for k, v in value.items() if v is not None}}
                 record[key] = merged_review
             else:
                 record[key] = value
