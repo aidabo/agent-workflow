@@ -250,12 +250,14 @@ def command_task_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_requirement_create(args: argparse.Namespace) -> int:
+def _command_requirement_create_impl(args: argparse.Namespace) -> int:
     requirement_id = safe_id(args.requirement_id, "requirement_id")
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
     path = requirement_path(root, requirement_id)
-    status = "needs_clarification" if args.open_questions else "clarified"
+    if args.round < 1:
+        raise ValueError("round must be at least 1")
+    status = "needs_clarification" if args.open_questions or not args.acceptance_criteria else "clarified"
     values = {
         "requirement_id": requirement_id, "status": status,
         "background": args.background, "users": args.users, "problem": args.problem,
@@ -269,12 +271,15 @@ def command_requirement_create(args: argparse.Namespace) -> int:
     }
     for key, value in values.items():
         reject_secret_values(value, key)
+    existing = None
     if path.exists() and not args.force:
         raise ValueError(f"requirement already exists: {requirement_id} (use --force to replace)")
     if path.exists():
         existing = read_json(path)
         if not isinstance(existing, dict) or existing.get("status") == "approved":
             raise ValueError("--force cannot replace an approved requirement")
+        if existing.get("created_at"):
+            values["created_at"] = existing["created_at"]
     atomic_write(path, values)
     print(json.dumps(values, ensure_ascii=False, indent=2))
     return 0
@@ -343,6 +348,13 @@ def assignment_lock(root: Path):
             yield
         finally:
             fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+
+
+def command_requirement_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_requirement_create_impl(args)
 
 
 def write_assignment_record(path: Path, record: dict[str, Any]) -> None:

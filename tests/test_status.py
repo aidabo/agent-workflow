@@ -30,6 +30,19 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(record["open_questions"], ["Which provider?"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_requirement_without_acceptance_criteria_needs_clarification_and_round_is_positive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+            ]), 0)
+            record = json.loads((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").read_text())
+            self.assertEqual(record["status"], "needs_clarification")
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-2",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O", "--round", "0",
+            ]), 2)
+
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [
