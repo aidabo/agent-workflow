@@ -258,6 +258,8 @@ def _command_requirement_create_impl(args: argparse.Namespace) -> int:
     if args.round < 1:
         raise ValueError("round must be at least 1")
     status = "needs_clarification" if args.open_questions or not args.acceptance_criteria else "clarified"
+    interview = {"mode": args.interview_mode, "round": args.round}
+    interview["completed_at" if status == "clarified" else "recorded_at"] = now()
     values = {
         "requirement_id": requirement_id, "status": status,
         "background": args.background, "users": args.users, "problem": args.problem,
@@ -266,7 +268,7 @@ def _command_requirement_create_impl(args: argparse.Namespace) -> int:
         "acceptance_criteria": args.acceptance_criteria,
         "open_questions": args.open_questions, "assumptions": args.assumptions,
         "risk_level": args.risk_level,
-        "interview": {"mode": args.interview_mode, "round": args.round, "completed_at": now()},
+        "interview": interview,
         "created_at": now(), "updated_at": now(),
     }
     for key, value in values.items():
@@ -276,8 +278,10 @@ def _command_requirement_create_impl(args: argparse.Namespace) -> int:
         raise ValueError(f"requirement already exists: {requirement_id} (use --force to replace)")
     if path.exists():
         existing = read_json(path)
-        if not isinstance(existing, dict) or existing.get("status") == "approved":
-            raise ValueError("--force cannot replace an approved requirement")
+        if not isinstance(existing, dict):
+            raise ValueError("cannot replace a malformed requirement")
+        if existing.get("status") in {"approved", "clarified"}:
+            raise ValueError("--force cannot replace an approved or clarified requirement")
         if existing.get("created_at"):
             values["created_at"] = existing["created_at"]
     atomic_write(path, values)
