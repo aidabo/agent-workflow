@@ -29,6 +29,13 @@ ALLOWED_PHASE_STATUS = {
     "code_human_review": {"ready_for_review"},
     "done": {"done"},
 }
+PIPELINE_PHASE_TRANSITIONS = {
+    "assigned": {"assigned", "coding"},
+    "coding": {"coding", "test", "code_review", "code_human_review"},
+    "test": {"test", "code_review", "code_human_review"},
+    "code_review": {"code_review", "code_human_review"},
+    "code_human_review": {"code_human_review"},
+}
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SECRET_VALUE = re.compile(r"(AKIA[0-9A-Z]{16}|(?:sk|rk)-[A-Za-z0-9_-]{20,}|https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,})")
 
@@ -341,12 +348,21 @@ def command_assign(args: argparse.Namespace) -> int:
         indexed_owners = active_task_owners(root, task_id)
         if any(owner != agent for owner in indexed_owners):
             raise ValueError(f"task {task_id} is already indexed by {', '.join(indexed_owners)}")
+        same_assigned_task = (
+            existing_agent == agent
+            and task.get("phase") == "assigned"
+            and task.get("state") == "busy"
+            and task.get("task_status") == "in_progress"
+        )
         if task.get("pipeline_managed") is True:
             plan_id = task.get("plan_id")
             plan = read_object(plan_path(root, plan_id), "plan") if isinstance(plan_id, str) else {}
             if plan.get("status") != "approved":
                 raise ValueError(f"plan {plan_id} must be approved before assigning tasks")
-        if task.get("state") not in {None, "idle"} or task.get("task_status") not in {None, "planned", "ready"}:
+        if not same_assigned_task and (
+            task.get("state") not in {None, "idle"}
+            or task.get("task_status") not in {None, "planned", "ready"}
+        ):
             raise ValueError(f"task {task_id} is not waiting for assignment")
         agent_record = read_json(agent_path)
         if not isinstance(agent_record, dict):
@@ -869,6 +885,28 @@ def command_status(args: argparse.Namespace) -> int:
     agent_path = path_for(root, "agents", agent)
     previous_task = read_json(task_path)
     previous_agent = read_json(agent_path)
+    if not isinstance(previous_task, dict):
+        previous_task = {}
+    if not isinstance(previous_agent, dict):
+        previous_agent = {}
+    if args.command == "begin" and previous_task.get("pipeline_managed") is True:
+        if previous_task.get("agent") != agent:
+            raise ValueError(f"pipeline task {task_id} must be assigned to {agent} before begin")
+        if previous_task.get("phase") != "assigned":
+            raise ValueError(f"pipeline task {task_id} must be in assigned phase before begin")
+        if args.phase != "coding":
+            raise ValueError("pipeline task begin requires --phase coding")
+        current = previous_agent.get("current_task_id")
+        if current and current != task_id:
+            raise ValueError(f"agent {agent} current task is {current}; assign {task_id} first")
+    if previous_task.get("pipeline_managed") is True and args.command in {"update", "heartbeat", "test", "end"}:
+        if previous_task.get("agent") != agent:
+            raise ValueError(f"pipeline task {task_id} is assigned to {previous_task.get('agent') or 'nobody'}")
+        if args.command != "end" and args.phase is not None:
+            previous_phase = previous_task.get("phase")
+            allowed_phases = PIPELINE_PHASE_TRANSITIONS.get(previous_phase, {previous_phase})
+            if args.phase not in allowed_phases:
+                raise ValueError(f"pipeline task {task_id} cannot move from {previous_phase} to {args.phase}")
     if args.command == "heartbeat" and args.state is None:
         state = previous_task.get("state") or "busy"
         if state == "stale":
@@ -889,18 +927,23 @@ def command_status(args: argparse.Namespace) -> int:
         "last_event": args.event, "blocked_reason": args.blocked_reason, "heartbeat_at": timestamp,
         "updated_at": timestamp,
     }
-    previous_active = set(previous_agent.get("active_task_ids", []))
+    previous_active = set(active_ids(previous_agent))
     if args.command == "end":
         previous_active.discard(task_id)
     else:
         previous_active.add(task_id)
     current_task_id = previous_agent.get("current_task_id")
-    if args.command != "end":
+    if args.command == "end":
+        if current_task_id == task_id:
+            current_task_id = sorted(previous_active)[-1] if previous_active else None
+        elif current_task_id not in previous_active:
+            current_task_id = sorted(previous_active)[-1] if previous_active else None
+    elif args.command == "begin" and previous_task.get("pipeline_managed") is not True:
         current_task_id = task_id
-    elif current_task_id == task_id:
-        current_task_id = sorted(previous_active)[-1] if previous_active else None
+    elif current_task_id is None:
+        current_task_id = task_id
     elif current_task_id not in previous_active:
-        current_task_id = sorted(previous_active)[-1] if previous_active else None
+        current_task_id = sorted(previous_active)[-1] if previous_active else task_id
     agent_updates = {
         "agent": agent, "active_task_ids": sorted(previous_active), "current_task_id": current_task_id,
         "heartbeat_at": timestamp, "updated_at": timestamp,
