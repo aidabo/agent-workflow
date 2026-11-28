@@ -165,7 +165,7 @@ task done:     phase=done / task_status=done / state=done
 ```text
 agent-status plan-create --title "..." --requirement "..."
 agent-status plan-create --title "..." --requirement-id req-... \
-  # clarified artifactの全フィールドを転記。CLI指定の値は転記値を置き換える
+  # clarified artifactの対応フィールドを転記（desired_outcome→requirement等）。CLI指定の値は転記値を置き換える
 agent-status task-create --plan-id plan-... --task-id task-001 --summary "..." --goal "..."
 agent-status task-list --plan-id plan-...
 agent-status plan-approve --plan-id plan-...
