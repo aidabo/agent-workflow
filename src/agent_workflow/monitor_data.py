@@ -152,7 +152,7 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
         if record.get("superseded_by"):
             line += f" superseded→{short_text(record.get('superseded_by'), 24)}"
         elif record.get("revision"):
-            line += f" revision={record.get('revision')}"
+            line += f" revision={short_text(record.get('revision'), 8)}"
         width = shutil.get_terminal_size((120, 24)).columns
         line = truncate_display(line, max(1, width))
         lines.append(line)
