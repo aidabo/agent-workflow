@@ -73,6 +73,11 @@ class StatusTests(unittest.TestCase):
                 "plan-create", "--workspace", tmp, "--plan-id", "plan-3",
                 "--title", "Blocked", "--requirement-id", "req-open",
             ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-4",
+                "--title", "Blocked",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
 
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:

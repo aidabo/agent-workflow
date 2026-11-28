@@ -140,6 +140,7 @@ bin/agent-workflow status requirement-create --workspace "$PWD" --requirement-id
   --acceptance-criteria "確認できる完了条件"
 bin/agent-workflow status plan-create --workspace "$PWD" --plan-id plan-002 \
   --title "artifactからの計画" --requirement-id req-001
+# open_questionsが残るrequirementはneeds_clarificationのためplan-createできない
 bin/agent-workflow status task-create --workspace "$PWD" --task-id task-001 \
   --plan-id plan-001 --summary "作業概要" --goal "完了条件"
 bin/agent-workflow status plan-approve --workspace "$PWD" --plan-id plan-001
