@@ -135,6 +135,8 @@ Phase 1/2のplan・task操作例：
 ```bash
 bin/agent-workflow status plan-create --workspace "$PWD" --plan-id plan-001 \
   --title "短い計画名" --requirement "達成したいこと"
+bin/agent-workflow status plan-create --workspace "$PWD" --plan-id plan-002 \
+  --title "artifactからの計画" --requirement-id req-001
 bin/agent-workflow status task-create --workspace "$PWD" --task-id task-001 \
   --plan-id plan-001 --summary "作業概要" --goal "完了条件"
 bin/agent-workflow status plan-approve --workspace "$PWD" --plan-id plan-001

@@ -95,6 +95,7 @@ plan directoryは`0700`、plan JSONは`0600`、書き込みは既存のatomic wr
 ```json
 {
   "plan_id": "plan-20261126-example",
+  "requirement_id": "req-20261128-example",
   "title": "短い計画名",
   "requirement": "利用者が達成したいこと",
   "acceptance_criteria": ["確認可能な完了条件"],
@@ -163,6 +164,8 @@ task done:     phase=done / task_status=done / state=done
 
 ```text
 agent-status plan-create --title "..." --requirement "..."
+agent-status plan-create --title "..." --requirement-id req-... \
+  # clarified requirement artifactからusers/scope/criteria/riskを転記
 agent-status task-create --plan-id plan-... --task-id task-001 --summary "..." --goal "..."
 agent-status task-list --plan-id plan-...
 agent-status plan-approve --plan-id plan-...
