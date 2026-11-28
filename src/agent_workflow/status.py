@@ -289,6 +289,11 @@ def command_planner_fixture(args: argparse.Namespace) -> int:
         plan_file = plan_path(root, plan_id)
         if plan_file.exists():
             raise ValueError(f"plan already exists: {plan_id}")
+        if not isinstance(fixture.get("title", plan_id), str):
+            raise ValueError("planner fixture title must be a string")
+        fixture_risk = fixture.get("risk_level", requirement.get("risk_level", "medium"))
+        if fixture_risk not in {"low", "medium", "high"}:
+            raise ValueError("planner fixture risk_level must be low, medium, or high")
         tasks = []
         for item in fixture["tasks"]:
             if not isinstance(item, dict):
@@ -296,11 +301,21 @@ def command_planner_fixture(args: argparse.Namespace) -> int:
             task_id = safe_id(item.get("task_id"), "task_id")
             if any(task["task_id"] == task_id for task in tasks):
                 raise ValueError(f"duplicate fixture task: {task_id}")
+            if not isinstance(item.get("summary"), str) or not isinstance(item.get("goal"), str):
+                raise ValueError("planner fixture task summary and goal must be strings")
+            if item.get("next_action") is not None and not isinstance(item["next_action"], str):
+                raise ValueError("planner fixture next_action must be a string")
+            criteria = item.get("acceptance_criteria", [])
+            if not isinstance(criteria, list) or not all(isinstance(value, str) for value in criteria):
+                raise ValueError("planner fixture acceptance_criteria must be a list of strings")
+            task_path = path_for(root, "tasks", task_id)
+            if task_path.exists():
+                raise ValueError(f"task already exists: {task_id}")
             tasks.append({
                 "task_id": task_id, "plan_id": plan_id, "agent": None,
                 "summary": item.get("summary", ""), "goal": item.get("goal", ""),
                 "next_action": item.get("next_action"),
-                "acceptance_criteria": item.get("acceptance_criteria", []),
+                "acceptance_criteria": criteria,
                 "phase": "docs", "state": "idle", "task_status": "ready",
                 "pipeline_managed": True, "created_at": now(), "updated_at": now(),
             })
@@ -316,16 +331,16 @@ def command_planner_fixture(args: argparse.Namespace) -> int:
             "constraints": requirement.get("constraints", []), "open_questions": [],
             "assumptions": requirement.get("assumptions", []),
             "task_ids": [task["task_id"] for task in tasks],
-            "risk_level": fixture.get("risk_level", requirement.get("risk_level", "medium")),
+            "risk_level": fixture_risk,
             "status": "draft", "created_at": now(), "updated_at": now(),
         }
         for key, value in plan.items():
             reject_secret_values(value, key)
-        atomic_write(plan_file, plan)
         for task in tasks:
             for key, value in task.items():
                 reject_secret_values(value, key)
             atomic_write(path_for(root, "tasks", task["task_id"]), task)
+        atomic_write(plan_file, plan)
     print(json.dumps({"plan": plan, "tasks": tasks}, ensure_ascii=False, indent=2))
     return 0
 

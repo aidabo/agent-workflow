@@ -85,6 +85,11 @@ class StatusTests(unittest.TestCase):
             self.assertEqual((plan["status"], plan["requirement_id"], plan["task_ids"]), ("draft", "req-1", ["task-a"]))
             self.assertEqual((task["task_status"], task["agent"]), ("ready", None))
             self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-fixture-2", "--input", "planner.json",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-fixture-2.json").exists())
+            self.assertEqual(main([
                 "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
                 "--background", "B", "--problem", "P", "--desired-outcome", "O",
                 "--acceptance-criteria", "C", "--open-questions", "Q",
