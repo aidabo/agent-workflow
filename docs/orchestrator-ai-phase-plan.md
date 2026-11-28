@@ -1,5 +1,7 @@
 # AI Orchestrator Phase plan
 
+この文書は既存の`orchestrator-interview-workflow-plan.md`と`requirement-task-assignment-pipeline-plan.md`を置き換えず、AI sessionとprovider adapterの追加契約を定義する。既存のtask/plan CLI契約は後者、利用者向け手順はrunbookを正本とする。
+
 ## 目的
 
 Phase 1〜5で、人がplan/taskを確認・承認し、agentへ明示assignする安全な実行基盤ができた。
@@ -46,10 +48,11 @@ flowchart LR
 {
   "requirement_id": "req-20261128-example",
   "status": "clarified",
+  "risk_level": "medium",
   "background": "なぜ必要か",
   "users": ["利用者"],
   "problem": "現在の困りごと",
-  "expected_result": "成功した状態",
+  "desired_outcome": "成功した状態",
   "scope": ["対象"],
   "non_goals": ["対象外"],
   "constraints": ["既存仕様・権限・互換性"],
@@ -65,6 +68,8 @@ flowchart LR
   "updated_at": "2026-11-28T00:00:00+00:00"
 }
 ```
+
+`desired_outcome`と`risk_level`は既存のinterview/runbook語彙に合わせる。plan JSONのusers/scope/acceptance criteriaは、このartifactから転記し、`requirement_id`も保持する。
 
 secret、token、password、pane入力、LLM会話全文は保存しない。既存のsafe ID、secret拒否、atomic write、0700/0600を再利用する。
 
@@ -82,12 +87,12 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 ## 承認・安全境界
 
 - **既存**: `open_questions`が残る場合、orchestratorは勝手に仮定を確定しない
-- **Phase実装予定**: Critic/Verifierの指摘が未解決ならplanをapprovedにしない
+- **Phase実装予定**: `plan-approve`はplanの`requirement_id`を辿り、open_questionsと未解決のCritic/Verifier findingsが残る場合に拒否する
 - **既存**: plan-approveは人の明示操作
-- **既存**: pipeline管理taskのassignはapproved planの未着手taskだけに限定される
+- **既存**: pipeline管理taskのassignはapproved planの未着手taskだけに限定される。legacy taskは既存互換のためplan承認なしでもassignできる
 - **既存**: paneへの強制入力、自動merge、自動deployは対象外
 - **既存**: verification failedは元taskを上書きせず`revision-create`へ渡す
-- **Phase実装予定**: revision-create後にCritic/Verifierを再実行するゲートを追加する。現行CLIはrevision taskをapproved planへ追加し、既存assignへ渡す。
+- **Phase実装予定**: revision-create後にCritic/Verifierを再実行するゲートを追加する。現行CLIはrevision taskをapproved planへ追加し、既存assignへ渡す。approved planを再承認する流れにはせず、revision task単位で再検証する。
 
 ## 実装段階
 
@@ -97,4 +102,4 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 4. Critic/Verifierの結果をplanへ保存
 5. plan/task review後に既存approve/assignへ接続
 
-完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にassignまで進まないことである。
+完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。
