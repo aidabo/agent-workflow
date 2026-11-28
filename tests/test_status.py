@@ -28,6 +28,8 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(record["status"], "needs_clarification")
             self.assertEqual(record["risk_level"], "high")
             self.assertEqual(record["open_questions"], ["Which provider?"])
+            self.assertNotIn("completed_at", record["interview"])
+            self.assertIn("recorded_at", record["interview"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_requirement_without_acceptance_criteria_needs_clarification_and_round_is_positive(self):
@@ -52,6 +54,20 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main([*args, "--background", "sk-secret-value-that-must-not-save"]), 2)
             self.assertEqual(main(args), 0)
             self.assertEqual(main(args), 2)
+
+    def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = [
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+            ]
+            self.assertEqual(main(args), 0)
+            path = Path(tmp) / ".agent-workflow/state/requirements/req-1.json"
+            created_at = json.loads(path.read_text())["created_at"]
+            self.assertEqual(main([*args, "--acceptance-criteria", "C", "--force"]), 0)
+            self.assertEqual(json.loads(path.read_text())["created_at"], created_at)
+            self.assertEqual(main([*args, "--background", "B3", "--force"]), 2)
+
     def test_latest_review_prefers_newer_evidence(self):
         self.assertEqual(latest_review(
             {"status": "approved", "updated_at": "2026-01-01T00:00:00+00:00"},
