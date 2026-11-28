@@ -47,19 +47,21 @@ def _provider_command(config_path: Path, provider: str) -> list[str]:
     return command
 
 
-def _output_path(workspace: Path, value: str) -> Path:
+def _output_path(workspace: Path, value: str, forbidden: set[Path]) -> Path:
     path = (workspace / value).resolve()
     relative = path.relative_to(workspace) if workspace in path.parents else None
     if relative is None or any(part.startswith(".") for part in relative.parts):
         raise ValueError("output must be a visible workspace-relative path")
     if path.exists() and not path.is_file():
         raise ValueError("output must be a regular file")
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path in forbidden:
+        raise ValueError("output must not overwrite input or config")
     return path
 
 
 def _write_result(path: Path, result: dict[str, Any]) -> None:
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         os.fchmod(fd, 0o600)
@@ -81,7 +83,7 @@ def run_provider(args: argparse.Namespace) -> int:
         raise ValueError(f"unsupported operation: {args.operation}")
     input_path = _workspace_file(workspace, args.input, "input")
     config_path = _workspace_file(workspace, args.config, "config")
-    output_path = _output_path(workspace, args.output) if args.output else None
+    output_path = _output_path(workspace, args.output, {input_path, config_path}) if args.output else None
     payload = _read_object(input_path, "provider input")
     preflight = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
     reject_secret_values(preflight, "preflight")
