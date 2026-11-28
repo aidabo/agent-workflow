@@ -48,7 +48,7 @@ directoryは`0700`、fileは`0600`を維持する。
   "head_sha": "0123456789abcdef0123456789abcdef01234567",
   "pr": 123,
   "test": {"status": "passed", "summary": "unit tests"},
-  "review": {"status": "changes_requested", "summary": "review指摘を修正する", "head_sha": "01234567", "updated_at": "2026-11-23T12:00:00+00:00"},
+  "review": {"status": "changes_requested", "summary": "review指摘を修正する", "head_sha": "0123456789abcdef0123456789abcdef01234567", "updated_at": "2026-11-23T12:00:00+00:00"},
   "next_action": "レビュー指摘の中2件を修正する",
   "references": ["docs/deploy/", "images/Screenshot_20.png"]
 }
