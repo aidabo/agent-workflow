@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -16,17 +18,19 @@ SOURCE_DIR_NAMES = {"app", "apps", "client", "lib", "packages", "server", "src",
 
 def _relative_files(root: Path, limit: int) -> tuple[list[Path], bool]:
     files: list[Path] = []
-    truncated = False
-    for path in sorted(root.rglob("*")):
-        if any(part in SKIP_DIRS or part.startswith(".") for part in path.relative_to(root).parts):
-            continue
-        if not path.is_file():
-            continue
-        if len(files) >= limit:
-            truncated = True
-            break
-        files.append(path)
-    return files, truncated
+    for current, directories, names in os.walk(root, topdown=True, followlinks=False):
+        directories[:] = sorted(
+            name for name in directories
+            if name not in SKIP_DIRS and not name.startswith(".")
+        )
+        for name in sorted(names):
+            path = Path(current) / name
+            if path.is_symlink():
+                continue
+            files.append(path)
+            if len(files) >= limit:
+                return files, any(True for _ in names[names.index(name) + 1:]) or bool(directories)
+    return files, False
 
 
 def _headings(path: Path) -> list[str]:
@@ -36,7 +40,19 @@ def _headings(path: Path) -> list[str]:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return []
-    return [line.strip()[:160] for line in text.splitlines() if line.lstrip().startswith("#")][:20]
+    headings: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            marker = stripped[:3]
+            fence = None if fence == marker else marker if fence is None else fence
+            continue
+        if fence is None and re.match(r"^#{1,6}\s+", stripped):
+            headings.append(stripped[:160])
+            if len(headings) == 20:
+                break
+    return headings
 
 
 def _git_info(workspace: Path, warnings: list[str]) -> dict[str, Any]:
@@ -82,7 +98,15 @@ def _state_summary(root: Path, warnings: list[str]) -> dict[str, Any]:
             except (OSError, ValueError, TypeError, json.JSONDecodeError):
                 malformed += 1
                 continue
-            status = value.get("status") or value.get("task_status") or "unknown"
+            if not isinstance(value, dict):
+                malformed += 1
+                continue
+            status = value.get("task_status") if kind == "tasks" else value.get("status")
+            if status is None:
+                status = "unknown"
+            if not isinstance(status, str):
+                malformed += 1
+                continue
             counts[status] = counts.get(status, 0) + 1
         summary[kind] = {"total": sum(counts.values()) + malformed, "by_status": counts, "malformed": malformed}
         if malformed:
@@ -97,10 +121,12 @@ def inspect_workspace(workspace: Path, docs_dir: str, state_root: Path, max_file
     docs = (workspace / docs_dir).resolve()
     if workspace not in docs.parents and docs != workspace:
         raise ValueError("docs_dir must stay inside workspace")
-    if not docs.exists():
-        raise FileNotFoundError(docs)
     warnings: list[str] = []
-    files, truncated = _relative_files(docs, max_files)
+    if docs.exists() and not docs.is_dir():
+        raise ValueError("docs_dir must be a directory")
+    files, truncated = _relative_files(docs, max_files) if docs.is_dir() else ([], False)
+    if not docs.exists():
+        warnings.append(f"docs directory does not exist: {docs}")
     doc_records = []
     for path in files:
         doc_records.append({
@@ -117,6 +143,7 @@ def inspect_workspace(workspace: Path, docs_dir: str, state_root: Path, max_file
     )
     manifests = sorted(name for name in top_level if name in MANIFESTS)
     return {
+        "schema_version": 1,
         "workspace_root": str(workspace),
         "git": _git_info(workspace, warnings),
         "source": {

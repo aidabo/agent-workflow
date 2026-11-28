@@ -37,6 +37,34 @@ class WorkspaceInspectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main(["workspace-inspect", "--workspace", tmp, "--docs-dir", "../outside"]), 2)
 
+    def test_skips_code_fences_and_tolerates_missing_docs_and_bad_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "guide.md").write_text("# Real\n```bash\n# Not a heading\n```\n")
+            state = workspace / ".agent-workflow" / "state"
+            (state / "requirements").mkdir(parents=True)
+            (state / "requirements" / "bad.json").write_text("[]")
+            (state / "tasks").mkdir()
+            (state / "tasks" / "bad.json").write_text(json.dumps({"task_status": []}))
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["workspace-inspect", "--workspace", tmp]), 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["schema_version"], 1)
+            self.assertEqual(result["docs"]["files"][0]["headings"], ["# Real"])
+            self.assertEqual(result["workflow_state"]["requirements"]["malformed"], 1)
+            self.assertEqual(result["workflow_state"]["tasks"]["malformed"], 1)
+
+    def test_missing_docs_returns_warning_with_other_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["workspace-inspect", "--workspace", tmp]), 0)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["docs"]["file_count"], 0)
+            self.assertTrue(any("docs directory does not exist" in warning for warning in result["warnings"]))
+
 
 if __name__ == "__main__":
     unittest.main()
