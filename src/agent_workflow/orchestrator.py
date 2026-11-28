@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -134,16 +135,21 @@ def run_provider(args: argparse.Namespace) -> int:
     }
     command = _provider_command(config_path, provider)
     try:
-        completed = subprocess.run(
-            command,
-            input=json.dumps(request, ensure_ascii=False),
-            capture_output=True,
-            text=True,
-            timeout=args.timeout,
-            check=False,
-            cwd=workspace,
-            env=os.environ.copy(),
+        provider_env = os.environ.copy()
+        provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(args.timeout)
+        process = subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, cwd=workspace, env=provider_env, start_new_session=True,
         )
+        try:
+            stdout, stderr = process.communicate(
+                json.dumps(request, ensure_ascii=False), timeout=args.timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+            raise ValueError(f"provider timed out after {args.timeout}s") from exc
+        completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except subprocess.TimeoutExpired as exc:
         raise ValueError(f"provider timed out after {args.timeout}s") from exc
     if completed.returncode != 0:

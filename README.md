@@ -100,7 +100,7 @@ application repositoryのpackage.jsonから呼ぶ場合は、次のようにし�
 完了条件、test、PR、review条件もtaskごとに決めてください。
 ```
 
-現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。orchestratorは要件確認前にworkspaceのソース構成・`docs/**`・既存workflow stateを読み取れます。要件回答をartifact化するprovider非依存の`requirement-interview`と、fixture planner、plan review gateも利用できます。plan承認後の明示assignとreconcileも利用できます。実provider adapterと対話型provider sessionは次Phaseです（[AI Orchestrator Phase plan](docs/orchestrator-ai-phase-plan.md)）。
+現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。orchestratorは要件確認前にworkspaceのソース構成・`docs/**`・既存workflow stateを読み取れます。Claude/Codex/DeepSeek wrapper、interactive interview、要件artifact化、fixture planner、plan review gateが利用できます。plan承認後の明示assignとreconcileも利用できます（[AI Orchestrator Phase plan](docs/orchestrator-ai-phase-plan.md)）。
 
 provider adapterはworkspace内の設定で実行します。adapterはstdinのJSONを受け、同じoperationを持つ`schema_version: 1`のJSONをstdoutへ返します。provider固有の認証情報やprompt履歴はworkflow stateへ保存しません。configのcommandはworkspaceの信頼境界内で、現在の環境変数を引き継いで実行するため、信頼できるworkspaceの設定だけを使用します。
 
