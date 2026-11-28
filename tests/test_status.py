@@ -426,6 +426,8 @@ class StatusTests(unittest.TestCase):
             task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
             self.assertEqual(task["review"]["status"], "changes_requested")
             self.assertEqual(task["review"]["summary"], "Fix test 2")
+            checkpoint = json.loads((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").read_text())
+            self.assertEqual(checkpoint["review"]["status"], "changes_requested")
 
     def test_heartbeat_preserves_human_state_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as tmp:
