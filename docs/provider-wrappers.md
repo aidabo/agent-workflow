@@ -14,6 +14,6 @@
 }
 ```
 
-DeepSeekはCLI commandを固定せず、`AGENT_WORKFLOW_DEEPSEEK_COMMAND`に利用者のlauncherを設定する。wrapperはrequestのpreflightとpayloadをpromptへ渡し、resultだけをstructured JSONとして返す。会話全文、認証情報、providerのstderrは保存・転送しない。
+DeepSeekはCLI commandを固定せず、`AGENT_WORKFLOW_DEEPSEEK_COMMAND`に利用者のlauncherを設定する。launcherはstdinからpromptを受け、`--print -`を引数に付けた呼び出しでstdoutへJSONだけを返す必要がある。wrapperはrequestのpreflightとpayloadをstdinでpromptへ渡し、resultだけをstructured JSONとして返す。会話全文、認証情報、providerのstderrは保存・転送しない。
 
-Claude/Codex wrapperはそれぞれ非対話・read-onlyモードで実行する。providerが返すJSONは、runner側でschema・secretを再検証してから`--output`へ保存する。
+Claude/Codex wrapperはそれぞれ非対話・read-onlyモードで実行し、promptはargvではなくstdinへ渡す。providerが返すJSONは、runner側でschema・secretを再検証してから`--output`へ保存する。wrapperとrunnerはプロセスグループ単位でtimeout終了する。

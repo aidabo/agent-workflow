@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shlex
 import subprocess
 import sys
@@ -27,6 +28,8 @@ def _json_document(text: str) -> Any:
 
 def _result_from_output(text: str) -> dict[str, Any]:
     value = _json_document(text)
+    if isinstance(value, dict) and "result" in value and not isinstance(value.get("result"), (dict, str)):
+        raise ValueError("provider result envelope has invalid result")
     if isinstance(value, dict) and isinstance(value.get("result"), (dict, str)):
         value = value["result"]
         if isinstance(value, str):
@@ -36,8 +39,24 @@ def _result_from_output(text: str) -> dict[str, Any]:
     return value
 
 
+def _run_process(command: list[str], prompt: str, workspace: Path) -> subprocess.CompletedProcess[str]:
+    timeout = int(os.environ.get("AGENT_WORKFLOW_WRAPPER_TIMEOUT", "300"))
+    process = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, cwd=workspace, start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(prompt, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
+        raise RuntimeError("provider wrapper timed out") from exc
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
 def _prompt(request: dict[str, Any]) -> str:
     return (
+        f"{SYSTEM_PROMPT}\n\n"
         f"Operation: {request['operation']}\n"
         "Return only the result JSON object, without markdown or commentary.\n"
         f"Workspace preflight:\n{json.dumps(request['preflight'], ensure_ascii=False, indent=2)}\n"
@@ -47,12 +66,11 @@ def _prompt(request: dict[str, Any]) -> str:
 
 def _run_claude(prompt: str, workspace: Path) -> str:
     command = shlex.split(os.environ.get("AGENT_WORKFLOW_CLAUDE_COMMAND", "claude"))
-    completed = subprocess.run(
+    completed = _run_process(
         command + [
-            "--print", "--output-format", "json", "--no-session-persistence",
-            "--tools", "", "--system-prompt", SYSTEM_PROMPT, prompt,
-        ], capture_output=True, text=True, cwd=workspace, check=False,
-    )
+            "--print", "--output-format", "json", "--no-session-persistence", "--bare",
+            "--tools", "", "--system-prompt", SYSTEM_PROMPT,
+        ], prompt, workspace)
     if completed.returncode != 0:
         raise RuntimeError(f"claude wrapper exited with {completed.returncode}")
     return completed.stdout
@@ -63,12 +81,11 @@ def _run_codex(prompt: str, workspace: Path) -> str:
     with tempfile.NamedTemporaryFile(prefix="agent-provider-", suffix=".json", delete=False) as output:
         output_path = Path(output.name)
     try:
-        completed = subprocess.run(
+        completed = _run_process(
             command + [
                 "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
-                "-o", str(output_path), prompt,
-            ], capture_output=True, text=True, cwd=workspace, check=False,
-        )
+                "-o", str(output_path), "-",
+            ], prompt, workspace)
         if completed.returncode != 0:
             raise RuntimeError(f"codex wrapper exited with {completed.returncode}")
         return output_path.read_text(encoding="utf-8")
@@ -80,10 +97,7 @@ def _run_deepseek(prompt: str, workspace: Path) -> str:
     raw = os.environ.get("AGENT_WORKFLOW_DEEPSEEK_COMMAND")
     if not raw:
         raise RuntimeError("AGENT_WORKFLOW_DEEPSEEK_COMMAND is not configured")
-    completed = subprocess.run(
-        shlex.split(raw) + ["--print", prompt],
-        capture_output=True, text=True, cwd=workspace, check=False,
-    )
+    completed = _run_process(shlex.split(raw) + ["--print", "-"], prompt, workspace)
     if completed.returncode != 0:
         raise RuntimeError(f"deepseek wrapper exited with {completed.returncode}")
     return completed.stdout
@@ -106,7 +120,15 @@ def run(provider: str, request: dict[str, Any]) -> dict[str, Any]:
         output = _run_deepseek(prompt, workspace)
     else:
         raise ValueError(f"unsupported provider: {provider}")
-    return {"schema_version": 1, "operation": request["operation"], "result": _result_from_output(output)}
+    result = _result_from_output(output)
+    if request["operation"] == "interview":
+        required = ("background", "problem", "desired_outcome")
+        if any(not isinstance(result.get(key), str) or not result[key].strip() for key in required):
+            raise ValueError("interview result requires background, problem, and desired_outcome")
+        risk_level = result.get("risk_level", "medium")
+        if risk_level not in {"low", "medium", "high"}:
+            raise ValueError("interview result risk_level must be low, medium, or high")
+    return {"schema_version": 1, "operation": request["operation"], "result": result}
 
 
 def main(argv: list[str] | None = None) -> int:
