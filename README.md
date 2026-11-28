@@ -151,11 +151,8 @@ bin/agent-workflow status reconcile --workspace "$PWD"
 AI orchestratorのfixture運用例：
 
 ```bash
-# answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
-bin/agent-workflow status requirement-create --workspace "$PWD" \
-  --requirement-id req-001 --background "背景" --problem "困りごと" \
-  --desired-outcome "期待結果" --acceptance-criteria "完了条件"
 # orchestrator sessionから回答fixtureをartifactへ変換する場合
+# answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
 bin/agent-workflow status requirement-interview --workspace "$PWD" \
   --requirement-id req-001 --input answers.json --interview-mode targeted --round 1
 bin/agent-workflow status planner-fixture --workspace "$PWD" \
