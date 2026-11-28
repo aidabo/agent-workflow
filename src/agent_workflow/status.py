@@ -19,6 +19,7 @@ PHASES = {
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
 REVIEW_STATUSES = {"pending", "approved", "changes_requested", "needs_you"}
+PLAN_REVIEW_STATUSES = {"pending", "approved", "changes_requested", "needs_human"}
 ALLOWED_PHASE_STATUS = {
     "docs": {"planned", "ready", "in_progress", "ready_for_review"},
     "docs_review": {"in_progress", "ready_for_review"},
@@ -274,15 +275,17 @@ def command_plan_review(args: argparse.Namespace) -> int:
         plan = read_object(path, "plan")
         if plan.get("status") != "draft":
             raise ValueError("plan-review can update draft plans only")
-        findings = [*args.critic_finding, *args.verifier_finding]
-        if args.review_status == "approved" and findings:
-            raise ValueError("a plan with findings cannot be marked approved")
         reject_secret_values(args.critic_finding, "critic_finding")
         reject_secret_values(args.verifier_finding, "verifier_finding")
+        previous = plan.get("ai_review") if isinstance(plan.get("ai_review"), dict) else {}
+        critic_findings = args.critic_finding or previous.get("critic_findings", [])
+        verifier_findings = args.verifier_finding or previous.get("verifier_findings", [])
+        if args.review_status == "approved" and [*critic_findings, *verifier_findings]:
+            raise ValueError("a plan with findings cannot be marked approved")
         plan["ai_review"] = {
             "status": args.review_status,
-            "critic_findings": args.critic_finding,
-            "verifier_findings": args.verifier_finding,
+            "critic_findings": critic_findings,
+            "verifier_findings": verifier_findings,
             "updated_at": now(),
         }
         plan["updated_at"] = now()
@@ -529,6 +532,9 @@ def command_plan_approve(args: argparse.Namespace) -> int:
         plan = read_object(path, "plan")
         if plan.get("status") != "draft":
             raise ValueError(f"plan {plan_id} is not draft: {plan.get('status')}")
+        ai_review = plan.get("ai_review")
+        if isinstance(ai_review, dict) and ai_review.get("status") != "approved":
+            raise ValueError(f"plan {plan_id} AI review is not approved: {ai_review.get('status', 'missing')}")
         task_ids = plan.get("task_ids")
         if not isinstance(task_ids, list):
             raise ValueError(f"plan {plan_id} has invalid task_ids")
@@ -1134,7 +1140,7 @@ def plan_review_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
     parser.add_argument("--plan-id", required=True)
-    parser.add_argument("--review-status", choices=("pending", "approved", "changes_requested", "needs_human"), default="pending")
+    parser.add_argument("--review-status", choices=sorted(PLAN_REVIEW_STATUSES), default="pending")
     parser.add_argument("--critic-finding", action="append", default=[])
     parser.add_argument("--verifier-finding", action="append", default=[])
 
