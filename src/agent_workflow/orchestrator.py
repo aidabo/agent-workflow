@@ -135,9 +135,11 @@ def run_provider(args: argparse.Namespace) -> int:
     }
     command = _provider_command(config_path, provider)
     try:
+        provider_env = os.environ.copy()
+        provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(args.timeout)
         process = subprocess.Popen(
             command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, cwd=workspace, env=os.environ.copy(), start_new_session=True,
+            text=True, cwd=workspace, env=provider_env, start_new_session=True,
         )
         try:
             stdout, stderr = process.communicate(

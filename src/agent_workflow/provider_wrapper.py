@@ -43,7 +43,7 @@ def _run_process(command: list[str], prompt: str, workspace: Path) -> subprocess
     timeout = int(os.environ.get("AGENT_WORKFLOW_WRAPPER_TIMEOUT", "300"))
     process = subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, cwd=workspace, start_new_session=True,
+        text=True, cwd=workspace,
     )
     try:
         stdout, stderr = process.communicate(prompt, timeout=timeout)
@@ -68,7 +68,8 @@ def _run_claude(prompt: str, workspace: Path) -> str:
     command = shlex.split(os.environ.get("AGENT_WORKFLOW_CLAUDE_COMMAND", "claude"))
     completed = _run_process(
         command + [
-            "--print", "--output-format", "json", "--no-session-persistence", "--bare",
+            "--print", "--output-format", "json", "--no-session-persistence",
+            "--restricted", "--strict-mcp-config", "--setting-sources", "",
             "--tools", "", "--system-prompt", SYSTEM_PROMPT,
         ], prompt, workspace)
     if completed.returncode != 0:
