@@ -535,6 +535,41 @@ def command_requirement_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_requirement_interview(args: argparse.Namespace) -> int:
+    requirement_id = safe_id(args.requirement_id, "requirement_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    input_path = (workspace / args.input).resolve()
+    if ".." in Path(args.input).parts or workspace not in input_path.parents:
+        raise ValueError("interview input must be workspace-relative")
+    try:
+        answers = json.loads(input_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid interview answers: {exc}") from exc
+    if not isinstance(answers, dict):
+        raise ValueError("interview answers must be an object")
+    required = ("background", "problem", "desired_outcome")
+    if any(not isinstance(answers.get(key), str) or not answers[key].strip() for key in required):
+        raise ValueError("interview answers require background, problem, and desired_outcome")
+    list_fields = ("users", "scope", "non_goals", "constraints", "acceptance_criteria", "open_questions", "assumptions")
+    for field in list_fields:
+        value = answers.get(field, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"interview answer {field} must be a list of strings")
+    risk_level = answers.get("risk_level", "medium")
+    if not isinstance(risk_level, str) or risk_level not in {"low", "medium", "high"}:
+        raise ValueError("interview answer risk_level must be low, medium, or high")
+    values = argparse.Namespace(
+        workspace=args.workspace, state_root=args.state_root, requirement_id=requirement_id,
+        background=answers["background"], users=answers.get("users", []), problem=answers["problem"],
+        desired_outcome=answers["desired_outcome"], scope=answers.get("scope", []),
+        non_goals=answers.get("non_goals", []), constraints=answers.get("constraints", []),
+        acceptance_criteria=answers.get("acceptance_criteria", []), open_questions=answers.get("open_questions", []),
+        assumptions=answers.get("assumptions", []), risk_level=risk_level,
+        interview_mode=args.interview_mode, round=args.round, force=args.force,
+    )
+    return command_requirement_create(values)
+
+
 def write_assignment_record(path: Path, record: dict[str, Any]) -> None:
     lock_path = path.with_suffix(path.suffix + ".lock")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1156,6 +1191,16 @@ def requirement_list_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--status", choices=("needs_clarification", "clarified"))
 
 
+def requirement_interview_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--requirement-id", required=True)
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--interview-mode", choices=("targeted", "full"), default="targeted")
+    parser.add_argument("--round", type=int, default=1)
+    parser.add_argument("--force", action="store_true")
+
+
 def planner_fixture_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -1353,6 +1398,8 @@ def main(argv: list[str] | None = None) -> int:
     requirement_show_parser(requirement_show)
     requirement_list = sub.add_parser("requirement-list")
     requirement_list_parser(requirement_list)
+    requirement_interview = sub.add_parser("requirement-interview")
+    requirement_interview_parser(requirement_interview)
     planner_fixture = sub.add_parser("planner-fixture")
     planner_fixture_parser(planner_fixture)
     task_create = sub.add_parser("task-create")
@@ -1404,6 +1451,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_requirement_show(args)
         if args.command == "requirement-list":
             return command_requirement_list(args)
+        if args.command == "requirement-interview":
+            return command_requirement_interview(args)
         if args.command == "planner-fixture":
             return command_planner_fixture(args)
         if args.command == "task-create":
