@@ -52,7 +52,7 @@ flowchart LR
 | `critic` | 2〜3 providerを並列 | scope漏れ、矛盾、危険な仮定を別視点で検出する |
 | `verifier` | 1〜2 provider | acceptance criteriaとtest/evidenceの実行可能性を確認する |
 
-複数providerのresultは、次Phaseでprovider名・operation・request head（preflightの`git.head`）を付けたfindings schemaへ集約する予定である。現状は1回の`orchestrator run`につき1 provider・1 outputであり、人が`plan-review --critic-finding/--verifier-finding`へ記録する。次Phase実装後も、findingsを直接taskやassignへ進めない。意見が一致しない場合は`needs_human`へ止め、単純な多数決で要件や安全条件を上書きしない。並列実行はread-only reviewに限り、同じstateやproduct codeを同時に書き換えない。
+複数providerのresultは`orchestrator fanout`でprovider名・operation・request head（preflightの`git.head`）を付けたfindings schemaへ集約する。resultが一致しない、providerが失敗する、workspaceのHEADが変わる場合は`needs_human`へ止め、findingsを直接taskやassignへ進めない。単純な多数決で要件や安全条件を上書きせず、並列実行はread-only reviewに限り、同じstateやproduct codeを同時に書き換えない。
 
 ## clarified requirement schema
 

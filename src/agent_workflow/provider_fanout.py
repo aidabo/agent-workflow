@@ -77,7 +77,7 @@ def run(args: argparse.Namespace) -> int:
     if args.operation not in {"critic", "verifier"}:
         raise ValueError("fanout supports only critic or verifier")
     providers = [safe_id(provider, "provider") for provider in args.providers]
-    if not providers or len(set(providers)) != len(providers):
+    if not providers or len({provider.casefold() for provider in providers}) != len(providers):
         raise ValueError("at least one unique provider is required")
     input_path = _existing_file(workspace, args.input, "input")
     config_path = _existing_file(workspace, args.config, "config")
@@ -91,6 +91,8 @@ def run(args: argparse.Namespace) -> int:
     reject_secret_values(preflight, "preflight")
     root = Path(__file__).resolve().parents[2]
     outputs = {provider: output_dir / f"{provider}.json" for provider in providers}
+    if args.operation.casefold() + "-findings" in {provider.casefold() for provider in providers}:
+        raise ValueError("provider name collides with aggregate output")
     if output_path in outputs.values():
         raise ValueError("aggregate output must not overwrite a provider result")
     findings: list[dict[str, Any]] = []
