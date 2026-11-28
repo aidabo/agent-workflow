@@ -18,6 +18,7 @@ PHASES = {
 }
 STATES = {"busy", "waiting_user", "blocked", "stale", "needs_human", "idle", "done"}
 TASK_STATUSES = {"planned", "ready", "in_progress", "ready_for_review", "needs_human", "done"}
+REVIEW_STATUSES = {"pending", "approved", "changes_requested", "needs_you"}
 ALLOWED_PHASE_STATUS = {
     "docs": {"planned", "ready", "in_progress", "ready_for_review"},
     "docs_review": {"in_progress", "ready_for_review"},
@@ -618,7 +619,15 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
         record = {} if reset else read_json(path)
         for field in clear_fields or set():
             record.pop(field, None)
-        record.update({key: value for key, value in updates.items() if value is not None})
+        for key, value in updates.items():
+            if value is None:
+                continue
+            if key == "review" and isinstance(value, dict):
+                previous_review = record.get("review") if isinstance(record.get("review"), dict) else {}
+                merged_review = {**previous_review, **{k: v for k, v in value.items() if v is not None}}
+                record[key] = merged_review
+            else:
+                record[key] = value
         record["updated_at"] = now()
         atomic_write(path, record)
         return record
@@ -840,6 +849,8 @@ def common_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--phase")
     parser.add_argument("--state")
     parser.add_argument("--task-status")
+    parser.add_argument("--review-status", choices=sorted(REVIEW_STATUSES))
+    parser.add_argument("--review-summary")
     parser.add_argument("--goal")
     parser.add_argument("--branch")
     parser.add_argument("--commit")
@@ -907,6 +918,7 @@ def command_status(args: argparse.Namespace) -> int:
     validate_enum(args.phase, PHASES, "phase")
     validate_enum(args.state, STATES, "state")
     validate_enum(args.task_status, TASK_STATUSES, "task_status")
+    validate_enum(args.review_status, REVIEW_STATUSES, "review_status")
     for label, value in vars(args).items():
         if isinstance(value, str):
             reject_secret(value, label)
@@ -951,6 +963,12 @@ def command_status(args: argparse.Namespace) -> int:
         "last_event": args.event, "blocked_reason": args.blocked_reason, "heartbeat_at": timestamp,
         "updated_at": timestamp,
     }
+    if args.review_status or args.review_summary:
+        task_updates["review"] = {
+            "status": args.review_status,
+            "summary": args.review_summary,
+            "updated_at": timestamp,
+        }
     previous_active = set(previous_agent.get("active_task_ids", []))
     if args.command == "end":
         previous_active.discard(task_id)
@@ -970,6 +988,7 @@ def command_status(args: argparse.Namespace) -> int:
     task = merge_record(
         task_path, task_updates,
         clear_fields={"blocked_reason"} if args.clear_blocked else set(),
+        lock=True,
     )
     agent_record = merge_record(
         agent_path, agent_updates,
