@@ -256,6 +256,10 @@ def command_revision_create(args: argparse.Namespace) -> int:
             raise ValueError("cannot create a revision from a completed task")
         if source.get("pipeline_managed") is not True:
             raise ValueError("revision tasks require a pipeline-managed source task")
+        if source.get("task_status") not in {"ready_for_review", "needs_human"}:
+            raise ValueError("revision source must be awaiting review or human verification")
+        if source.get("superseded_by"):
+            raise ValueError(f"task {source_id} already has revision {source['superseded_by']}")
         target = path_for(root, "tasks", task_id)
         if target.exists():
             raise ValueError(f"task already exists: {task_id}")
@@ -278,6 +282,9 @@ def command_revision_create(args: argparse.Namespace) -> int:
         for key, value in values.items():
             reject_secret_values(value, key)
         write_assignment_record(target, values)
+        source["superseded_by"] = task_id
+        source["updated_at"] = now()
+        write_assignment_record(path_for(root, "tasks", source_id), source)
         task_ids = plan.get("task_ids") if isinstance(plan.get("task_ids"), list) else []
         plan["task_ids"] = [*task_ids, task_id]
         plan["updated_at"] = now()
@@ -376,6 +383,8 @@ def command_assign(args: argparse.Namespace) -> int:
         task = read_object(task_path, "task")
         if task.get("state") in {"done", "stale"} or task.get("task_status") == "done":
             raise ValueError(f"cannot assign {task_id}: task is {task.get('state') or task.get('task_status')}")
+        if task.get("superseded_by"):
+            raise ValueError(f"task {task_id} was superseded by {task['superseded_by']}")
         existing_agent = task.get("agent")
         if existing_agent and existing_agent != agent:
             raise ValueError(f"task {task_id} is already assigned to {existing_agent}")

@@ -41,12 +41,32 @@ class StatusTests(unittest.TestCase):
                 "--title", "Test", "--requirement", "Do thing",
                 "--acceptance-criteria", "sk-secret-value-that-must-not-save",
             ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Test", "--requirement", "Do thing",
+            ]), 0)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
+            ]), 0)
+            task_path = Path(tmp) / ".agent-workflow/state/tasks/task-1.json"
+            task = json.loads(task_path.read_text())
+            task.update({"phase": "code_review", "state": "waiting_user", "task_status": "ready_for_review"})
+            atomic_write(task_path, task)
+            self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1",
+                "--plan-id", "plan-1", "--summary", "Reset", "--goal", "Reset", "--force",
+            ]), 2)
 
     def test_revision_create_preserves_source_task_and_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main(["plan-create", "--workspace", tmp, "--plan-id", "p", "--title", "P", "--requirement", "R"]), 0)
             self.assertEqual(main(["task-create", "--workspace", tmp, "--task-id", "t", "--plan-id", "p", "--summary", "S", "--goal", "G"]), 0)
             self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "p"]), 0)
+            source_path = Path(tmp) / ".agent-workflow/state/tasks/t.json"
+            source = json.loads(source_path.read_text())
+            source.update({"phase": "code_review", "state": "waiting_user", "task_status": "ready_for_review"})
+            atomic_write(source_path, source)
             self.assertEqual(main([
                 "revision-create", "--workspace", tmp, "--source-task-id", "t", "--task-id", "t-r1",
                 "--summary", "Fix", "--goal", "Fixed", "--failure-reason", "verification failed",
@@ -58,21 +78,10 @@ class StatusTests(unittest.TestCase):
             self.assertEqual((revision["previous_task_id"], revision["revision"]), ("t", 1))
             self.assertEqual(revision["previous_evidence"], ["test log"])
             self.assertIsNone(source["agent"])
+            self.assertEqual(source["superseded_by"], "t-r1")
             self.assertEqual(main([
-                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
-                "--title", "Test", "--requirement", "Do thing",
-            ]), 0)
-            self.assertEqual(main([
-                "task-create", "--workspace", tmp, "--task-id", "task-1",
-                "--plan-id", "plan-1", "--summary", "Summary", "--goal", "Goal",
-            ]), 0)
-            self.assertEqual(main([
-                "begin", "--workspace", tmp, "--agent", "codex", "--task-id", "task-1",
-                "--phase", "coding",
-            ]), 0)
-            self.assertEqual(main([
-                "task-create", "--workspace", tmp, "--task-id", "task-1",
-                "--plan-id", "plan-1", "--summary", "Reset", "--goal", "Reset", "--force",
+                "revision-create", "--workspace", tmp, "--source-task-id", "t", "--task-id", "t-r2",
+                "--summary", "Fix2", "--goal", "Fixed2", "--failure-reason", "again",
             ]), 2)
 
     def test_force_preserves_plan_task_ids_and_rejects_heartbeat_active_task(self):
