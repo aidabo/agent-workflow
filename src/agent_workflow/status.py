@@ -555,13 +555,16 @@ def command_requirement_interview(args: argparse.Namespace) -> int:
         value = answers.get(field, [])
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ValueError(f"interview answer {field} must be a list of strings")
+    risk_level = answers.get("risk_level", "medium")
+    if not isinstance(risk_level, str) or risk_level not in {"low", "medium", "high"}:
+        raise ValueError("interview answer risk_level must be low, medium, or high")
     values = argparse.Namespace(
         workspace=args.workspace, state_root=args.state_root, requirement_id=requirement_id,
         background=answers["background"], users=answers.get("users", []), problem=answers["problem"],
         desired_outcome=answers["desired_outcome"], scope=answers.get("scope", []),
         non_goals=answers.get("non_goals", []), constraints=answers.get("constraints", []),
         acceptance_criteria=answers.get("acceptance_criteria", []), open_questions=answers.get("open_questions", []),
-        assumptions=answers.get("assumptions", []), risk_level=answers.get("risk_level", "medium"),
+        assumptions=answers.get("assumptions", []), risk_level=risk_level,
         interview_mode=args.interview_mode, round=args.round, force=args.force,
     )
     return command_requirement_create(values)
