@@ -148,6 +148,23 @@ bin/agent-workflow status assign --workspace "$PWD" --task-id task-001 --agent c
 bin/agent-workflow status reconcile --workspace "$PWD"
 ```
 
+AI orchestratorのfixture運用例：
+
+```bash
+# answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
+bin/agent-workflow status requirement-interview --workspace "$PWD" \
+  --requirement-id req-001 --input answers.json --interview-mode full
+bin/agent-workflow status planner-fixture --workspace "$PWD" \
+  --requirement-id req-001 --plan-id plan-001 --input planner.json
+bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
+  --review-status changes_requested --critic-finding "scopeを分割する"
+# findingsを解消した後、明示的にクリアして承認へ進める
+bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
+  --review-status approved --clear-findings
+```
+
+このfixtureはprovider非依存のdraft生成で、LLM呼び出し・自動assign・pane入力は行いません。
+
 pipeline管理taskの`assign`は承認済みplanの未着手taskだけを割り当てます。legacy taskは既存互換のため
 plan承認なしでもassignできます。作業開始前の取り消しは`unassign --task-id task-001`、done/stale taskの
 再割り当ては拒否されます。

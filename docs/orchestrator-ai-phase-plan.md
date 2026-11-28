@@ -98,10 +98,11 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 
 ## 実装段階
 
-1. requirement artifactの保存・検証CLI
-2. orchestrator sessionからartifactを作る対話入口
-3. planner adapterのprovider非依存fixture
-4. Critic/Verifierの結果をplanへ保存
-5. plan/task review後に既存approve/assignへ接続
+1. requirement artifactの保存・検証CLI（実装済み）
+2. orchestrator sessionからartifactを作る対話入口（実装済み: fixture input）
+3. planner adapterのprovider非依存fixture（実装済み）
+4. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
+5. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
+6. 実provider adapterとinteractive session（未実装）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。
