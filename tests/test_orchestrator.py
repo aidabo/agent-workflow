@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +132,50 @@ class OrchestratorTests(unittest.TestCase):
                 self.assertEqual(main([
                     "plan", "--workspace", tmp, "--provider", "test",
                     "--config", config.name, "--input", "input.json", "--output", output,
+                ]), 2)
+
+    def test_interactive_interview_builds_payload_without_saving_transcript(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            config = workspace / "providers.json"
+            command = [sys.executable, "-c", "import json,sys; r=json.load(sys.stdin); print(json.dumps({'schema_version':1,'operation':r['operation'],'result':r['payload']}))"]
+            config.write_text(json.dumps({"providers": {"test": command}}))
+            answers = [
+                "B", "operator", "P", "O", "src", "legacy", "constraint", "criteria", "question", "assumption", "low",
+            ]
+            output = io.StringIO()
+            error = io.StringIO()
+            with patch("builtins.input", side_effect=answers), contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test",
+                    "--config", config.name, "--interactive", "--output", "clarified.json",
+                ]), 0)
+            result = json.loads((workspace / "clarified.json").read_text())
+            self.assertEqual(result["background"], "B")
+            self.assertEqual(result["acceptance_criteria"], ["criteria"])
+            self.assertIn("Background:", error.getvalue())
+            self.assertFalse((workspace / "transcript.json").exists())
+
+    def test_interactive_rejects_non_interview_and_secret_or_eof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            config = workspace / "providers.json"
+            config.write_text(json.dumps({"providers": {"test": [sys.executable, "-c", "print('{}')"]}}))
+            self.assertEqual(main([
+                "plan", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
+            ]), 2)
+            with patch("builtins.input", side_effect=[
+                "sk-" + "A" * 24, "u", "p", "o", "scope", "non-goal", "constraint",
+                "criteria", "question", "assumption", "low",
+            ]):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
+                ]), 2)
+            with patch("builtins.input", side_effect=EOFError):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
                 ]), 2)
 
 
