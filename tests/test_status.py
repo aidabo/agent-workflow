@@ -238,6 +238,19 @@ class StatusTests(unittest.TestCase):
             ]), 2)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").exists())
 
+    def test_requirement_interview_rejects_environment_style_secret_names(self):
+        for secret_name in ("AWS_SECRET_ACCESS_KEY", "SECRET_KEY"):
+            with self.subTest(secret_name=secret_name), tempfile.TemporaryDirectory() as tmp:
+                answers = Path(tmp) / "answers.json"
+                answers.write_text(json.dumps({
+                    "background": "B", "problem": f"{secret_name}=value",
+                    "desired_outcome": "O", "acceptance_criteria": ["C"],
+                }))
+                self.assertEqual(main([
+                    "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
+                    "--input", "answers.json",
+                ]), 2)
+
     def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [
