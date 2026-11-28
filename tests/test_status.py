@@ -45,6 +45,40 @@ class StatusTests(unittest.TestCase):
                 "--background", "B", "--problem", "P", "--desired-outcome", "O", "--round", "0",
             ]), 2)
 
+    def test_plan_create_from_clarified_requirement_transfers_lineage_and_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--users", "operator", "--scope", "src", "--acceptance-criteria", "C",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Plan", "--requirement-id", "req-1",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-1.json").read_text())
+            self.assertEqual(plan["requirement_id"], "req-1")
+            self.assertEqual(plan["requirement"], "O")
+            self.assertEqual(plan["acceptance_criteria"], ["C"])
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-2",
+                "--title", "Blocked", "--requirement-id", "req-missing",
+            ]), 2)
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C", "--open-questions", "Q",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-3",
+                "--title", "Blocked", "--requirement-id", "req-open",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-4",
+                "--title", "Blocked",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
+
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [

@@ -135,23 +135,35 @@ def _command_plan_create_impl(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
+    requirement = None
+    if args.requirement_id:
+        requirement_id = safe_id(args.requirement_id, "requirement_id")
+        requirement = read_object(requirement_path(root, requirement_id), "requirement")
+        if requirement.get("status") != "clarified":
+            raise ValueError(f"requirement {requirement_id} must be clarified before plan creation")
+    if not args.requirement and requirement is None:
+        raise ValueError("plan-create requires --requirement or --requirement-id")
+    source = requirement or {}
     values = {
         "plan_id": plan_id,
         "title": args.title,
-        "requirement": args.requirement,
-        "users": args.users,
-        "acceptance_criteria": args.acceptance_criteria,
-        "scope": args.scope,
-        "non_goals": args.non_goals,
-        "constraints": args.constraints,
-        "open_questions": args.open_questions,
-        "assumptions": args.assumptions,
+        "requirement": args.requirement or source.get("desired_outcome"),
+        "requirement_id": args.requirement_id,
+        "users": args.users or source.get("users", []),
+        "acceptance_criteria": args.acceptance_criteria or source.get("acceptance_criteria", []),
+        "scope": args.scope or source.get("scope", []),
+        "non_goals": args.non_goals or source.get("non_goals", []),
+        "constraints": args.constraints or source.get("constraints", []),
+        "open_questions": args.open_questions or source.get("open_questions", []),
+        "assumptions": args.assumptions or source.get("assumptions", []),
         "task_ids": [],
-        "risk_level": args.risk_level,
+        "risk_level": args.risk_level or source.get("risk_level", "medium"),
         "status": "draft",
         "created_at": now(),
         "updated_at": now(),
     }
+    if not args.requirement_id:
+        values.pop("requirement_id")
     for key, value in values.items():
         reject_secret_values(value, key)
     path = plan_path(root, plan_id)
@@ -932,7 +944,8 @@ def plan_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--state-root")
     parser.add_argument("--plan-id", required=True)
     parser.add_argument("--title", required=True)
-    parser.add_argument("--requirement", required=True)
+    parser.add_argument("--requirement")
+    parser.add_argument("--requirement-id")
     parser.add_argument("--users", action="append", default=[])
     parser.add_argument("--acceptance-criteria", action="append", default=[])
     parser.add_argument("--scope", action="append", default=[])
@@ -940,7 +953,7 @@ def plan_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--constraints", action="append", default=[])
     parser.add_argument("--open-questions", action="append", default=[])
     parser.add_argument("--assumptions", action="append", default=[])
-    parser.add_argument("--risk-level", choices=("low", "medium", "high"), default="medium")
+    parser.add_argument("--risk-level", choices=("low", "medium", "high"))
     parser.add_argument("--force", action="store_true")
 
 
