@@ -79,6 +79,22 @@ class StatusTests(unittest.TestCase):
             ]), 2)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
 
+    def test_plan_review_records_critic_and_verifier_findings_without_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
+                "--title", "Plan", "--requirement", "Requirement",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1",
+                "--review-status", "changes_requested", "--critic-finding", "Scope too broad",
+                "--verifier-finding", "Missing test evidence",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-1.json").read_text())
+            self.assertEqual(plan["status"], "draft")
+            self.assertEqual(plan["ai_review"]["critic_findings"], ["Scope too broad"])
+            self.assertEqual(plan["ai_review"]["verifier_findings"], ["Missing test evidence"])
+
     def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main([
