@@ -42,6 +42,11 @@ class StatusTests(unittest.TestCase):
                 "--background", "B", "--problem", "P", "--desired-outcome", "O",
                 "--open-questions", "Q",
             ]), 0)
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-clarified",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C",
+            ]), 0)
             list_output = io.StringIO()
             with contextlib.redirect_stdout(list_output):
                 self.assertEqual(main(["requirement-list", "--workspace", tmp, "--status", "needs_clarification"]), 0)
