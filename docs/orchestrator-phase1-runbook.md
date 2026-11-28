@@ -3,11 +3,11 @@
 ## 目的
 
 このrunbookは、要件をOrchestratorへ渡し、plan/taskを確認するまでの人間の操作手順を定義する。
-assign、current task表示、reconcile、revision実行は後続Phaseの手順であり、Phase 1の完了条件には
-含めない。
+assign、current task表示、reconcile、revision実行のうち、assign/reconcileはPhase 2で実装済みである。
+revision実行は後続Phaseの手順であり、Phase 1の完了条件には含めない。
 
-> 注意: `plan-create`、`task-create`はPhase 1で検討するCLIの仮称、`assign`はPhase 2実装予定であり、現在の`v0.2.0`
-> にはまだ存在しない。先に手作業でpaneへ指示して進める場合も、task JSONを正本にする設計は崩さない。
+> 注意: `plan-create`、`task-create`、`plan-approve`、`assign`、`unassign`、`reconcile`はPhase 1/2のCLIである。
+> planを承認してからassignし、task JSONとagent indexを正本としてpaneへ指示する。
 
 ## 1. 開始前の確認
 
@@ -100,10 +100,11 @@ plan承認後、task listを確認する。
 | agent候補 | 必要な技能・repositoryを持つか |
 | 依存関係 | 前taskが終わるまで開始してはいけないtaskが明確か |
 
-割り当てはPhase 2で人が承認する。将来のCLIでは次の操作になる（引数名は実装時に設計書と確定する）。
+割り当てはplan承認後にPhase 2 CLIで人が実行する。
 
 ```bash
-agent-status assign --task task-001 --agent codex
+agent-status plan-approve --plan-id plan-001
+agent-status assign --task-id task-001 --agent codex
 ```
 
 assign後の正しい状態は次のとおり。
@@ -113,8 +114,7 @@ task:  phase=assigned / task_status=in_progress / state=busy
 agent: active_task_idsにtask-001、current_task_id=task-001
 ```
 
-実装CLIがない間は、既存の`agent-status begin`を使うlegacy taskと、pipeline管理taskを混同しない。
-`pipeline_managed=true`のtaskは、Phase 2以降のassign処理なしにbeginさせない。
+`pipeline_managed=true`のtaskは、`plan-approve`と`assign`を経てからwork sessionへ渡す。
 
 ## 6. Work agentへの引き渡し
 

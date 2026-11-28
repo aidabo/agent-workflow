@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -125,7 +126,7 @@ def replaceable_task(existing: dict[str, Any], root: Path, task_id: str) -> bool
     )
 
 
-def command_plan_create(args: argparse.Namespace) -> int:
+def _command_plan_create_impl(args: argparse.Namespace) -> int:
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
     root = state_root(workspace, args.state_root)
@@ -163,7 +164,7 @@ def command_plan_create(args: argparse.Namespace) -> int:
     return 0
 
 
-def command_task_create(args: argparse.Namespace) -> int:
+def _command_task_create_impl(args: argparse.Namespace) -> int:
     task_id = safe_id(args.task_id, "task_id")
     plan_id = safe_id(args.plan_id, "plan_id")
     workspace = Path(args.workspace).expanduser().resolve()
@@ -242,6 +243,259 @@ def command_task_list(args: argparse.Namespace) -> int:
         records.append(record)
     print(json.dumps(records, ensure_ascii=False, indent=2))
     return 0
+
+
+@contextmanager
+def assignment_lock(root: Path):
+    root.mkdir(parents=True, exist_ok=True)
+    root.chmod(0o700)
+    if root.parent.name == ".agent-workflow":
+        root.parent.mkdir(parents=True, exist_ok=True)
+        root.parent.chmod(0o700)
+    lock_path = root / "assignment.lock"
+    with open(lock_path, "a+", encoding="utf-8") as lock_stream:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+
+
+def write_assignment_record(path: Path, record: dict[str, Any]) -> None:
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+", encoding="utf-8") as lock_stream:
+        os.chmod(lock_path, 0o600)
+        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        try:
+            atomic_write(path, record)
+        finally:
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+
+
+def read_object(path: Path, label: str) -> dict[str, Any]:
+    record = read_json(path)
+    if not record:
+        raise ValueError(f"{label} does not exist: {path.stem}")
+    if not isinstance(record, dict):
+        raise ValueError(f"{label} is not an object: {path.name}")
+    return record
+
+
+def active_ids(record: dict[str, Any]) -> list[str]:
+    values = record.get("active_task_ids")
+    if not isinstance(values, list):
+        return []
+    return sorted({value for value in values if isinstance(value, str) and SAFE_ID.fullmatch(value)})
+
+
+def current_task_for(agent_record: dict[str, Any], task_ids: list[str]) -> str | None:
+    current = agent_record.get("current_task_id")
+    if isinstance(current, str) and current in task_ids:
+        return current
+    return task_ids[-1] if task_ids else None
+
+
+def command_plan_approve(args: argparse.Namespace) -> int:
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    path = plan_path(root, plan_id)
+    with assignment_lock(root):
+        plan = read_object(path, "plan")
+        if plan.get("status") != "draft":
+            raise ValueError(f"plan {plan_id} is not draft: {plan.get('status')}")
+        task_ids = plan.get("task_ids")
+        if not isinstance(task_ids, list):
+            raise ValueError(f"plan {plan_id} has invalid task_ids")
+        if not task_ids:
+            raise ValueError(f"plan {plan_id} has no tasks to approve")
+        for task_id in task_ids:
+            if not isinstance(task_id, str) or not SAFE_ID.fullmatch(task_id):
+                raise ValueError(f"plan {plan_id} has invalid task_id")
+            task = read_object(path_for(root, "tasks", task_id), "task")
+            if task.get("plan_id") != plan_id:
+                raise ValueError(f"task {task_id} does not belong to plan {plan_id}")
+        plan["status"] = "approved"
+        plan["updated_at"] = now()
+        write_assignment_record(path, plan)
+    print(json.dumps(plan, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_assign(args: argparse.Namespace) -> int:
+    task_id = safe_id(args.task_id, "task_id")
+    agent = safe_id(args.agent, "agent")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_path = path_for(root, "tasks", task_id)
+    agent_path = path_for(root, "agents", agent)
+    with assignment_lock(root):
+        task = read_object(task_path, "task")
+        if task.get("state") in {"done", "stale"} or task.get("task_status") == "done":
+            raise ValueError(f"cannot assign {task_id}: task is {task.get('state') or task.get('task_status')}")
+        existing_agent = task.get("agent")
+        if existing_agent and existing_agent != agent:
+            raise ValueError(f"task {task_id} is already assigned to {existing_agent}")
+        indexed_owners = active_task_owners(root, task_id)
+        if any(owner != agent for owner in indexed_owners):
+            raise ValueError(f"task {task_id} is already indexed by {', '.join(indexed_owners)}")
+        if task.get("pipeline_managed") is True:
+            plan_id = task.get("plan_id")
+            plan = read_object(plan_path(root, plan_id), "plan") if isinstance(plan_id, str) else {}
+            if plan.get("status") != "approved":
+                raise ValueError(f"plan {plan_id} must be approved before assigning tasks")
+        if task.get("state") not in {None, "idle"} or task.get("task_status") not in {None, "planned", "ready"}:
+            raise ValueError(f"task {task_id} is not waiting for assignment")
+        agent_record = read_json(agent_path)
+        if not isinstance(agent_record, dict):
+            agent_record = {}
+        task["agent"] = agent
+        task["phase"] = "assigned"
+        task["state"] = "busy"
+        task["task_status"] = "in_progress"
+        task["assigned_at"] = now()
+        task["updated_at"] = now()
+        ids = sorted(set(active_ids(agent_record)) | {task_id})
+        agent_record.update({
+            "agent": agent,
+            "active_task_ids": ids,
+            "current_task_id": task_id,
+            "heartbeat_at": now(),
+            "updated_at": now(),
+        })
+        write_assignment_record(task_path, task)
+        write_assignment_record(agent_path, agent_record)
+    print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_unassign(args: argparse.Namespace) -> int:
+    task_id = safe_id(args.task_id, "task_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    task_path = path_for(root, "tasks", task_id)
+    with assignment_lock(root):
+        task = read_object(task_path, "task")
+        agent = task.get("agent")
+        if not isinstance(agent, str) or not agent:
+            raise ValueError(f"task {task_id} is not assigned")
+        if task.get("phase") != "assigned":
+            raise ValueError(f"cannot unassign active task {task_id}; phase is {task.get('phase')}")
+        agent_path = path_for(root, "agents", agent)
+        agent_record = read_json(agent_path)
+        if not isinstance(agent_record, dict):
+            agent_record = {"agent": agent}
+        ids = [value for value in active_ids(agent_record) if value != task_id]
+        task["agent"] = None
+        task["phase"] = "docs"
+        task["state"] = "idle"
+        task["task_status"] = "ready"
+        task["unassigned_at"] = now()
+        task["updated_at"] = now()
+        agent_record["agent"] = agent
+        agent_record["active_task_ids"] = ids
+        current_task_id = current_task_for(agent_record, ids)
+        if current_task_id is None:
+            agent_record.pop("current_task_id", None)
+        else:
+            agent_record["current_task_id"] = current_task_id
+        agent_record["updated_at"] = now()
+        write_assignment_record(task_path, task)
+        write_assignment_record(agent_path, agent_record)
+    print(json.dumps({"task": task, "agent": agent_record}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_reconcile(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    changed_tasks: list[str] = []
+    changed_agents: list[str] = []
+    warnings: list[str] = []
+    with assignment_lock(root):
+        tasks: dict[str, dict[str, Any]] = {}
+        for path in sorted((root / "tasks").glob("*.json")):
+            try:
+                record = read_json(path)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                warnings.append(f"invalid task {path.name}: {exc}")
+                continue
+            if isinstance(record, dict):
+                tasks[path.stem] = record
+            else:
+                warnings.append(f"task {path.name} is not an object")
+        agents: dict[str, dict[str, Any]] = {}
+        claims: dict[str, list[str]] = {}
+        for path in sorted((root / "agents").glob("*.json")):
+            try:
+                record = read_json(path)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                warnings.append(f"invalid agent {path.name}: {exc}")
+                continue
+            if not isinstance(record, dict):
+                warnings.append(f"agent {path.name} is not an object")
+                continue
+            name = record.get("agent") if isinstance(record.get("agent"), str) else path.stem
+            agents[name] = record
+            for task_id in active_ids(record):
+                claims.setdefault(task_id, []).append(name)
+        for task_id, task in tasks.items():
+            owners = sorted(set(claims.get(task_id, [])))
+            owner = task.get("agent") if isinstance(task.get("agent"), str) else None
+            if owner and owner not in agents:
+                agents[owner] = {"agent": owner}
+            can_restore_pipeline_owner = (
+                task.get("pipeline_managed") is not True
+                or (
+                    task.get("phase") == "assigned"
+                    and task.get("state") == "busy"
+                    and task.get("task_status") == "in_progress"
+                )
+            )
+            if not owner and len(owners) == 1 and task.get("state") != "done" and can_restore_pipeline_owner:
+                owner = owners[0]
+                task["agent"] = owner
+                task["updated_at"] = now()
+                write_assignment_record(path_for(root, "tasks", task_id), task)
+                changed_tasks.append(task_id)
+            elif not owner and len(owners) == 1 and not can_restore_pipeline_owner:
+                warnings.append(f"task {task_id} keeps task-side unassignment; removing stale index owner {owners[0]}")
+            if len(owners) > 1 and not owner:
+                warnings.append(f"task {task_id} has multiple indexed owners: {', '.join(owners)}")
+        desired: dict[str, list[str]] = {name: [] for name in agents}
+        for task_id, task in tasks.items():
+            owner = task.get("agent")
+            if isinstance(owner, str) and owner in desired and task.get("state") != "done":
+                desired[owner].append(task_id)
+        for name, record in agents.items():
+            ids = sorted(desired.get(name, []))
+            current = current_task_for(record, ids)
+            if active_ids(record) != ids or record.get("current_task_id") != current:
+                record["agent"] = name
+                record["active_task_ids"] = ids
+                record["current_task_id"] = current
+                record["updated_at"] = now()
+                write_assignment_record(path_for(root, "agents", name), record)
+                changed_agents.append(name)
+    result = {"changed_tasks": sorted(set(changed_tasks)), "changed_agents": sorted(set(changed_agents)), "warnings": warnings}
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_plan_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_plan_create_impl(args)
+
+
+def command_task_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_task_create_impl(args)
 
 
 def validate_enum(value: str | None, values: set[str], label: str) -> None:
@@ -577,6 +831,14 @@ def task_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
 
 
+def assignment_parser(parser: argparse.ArgumentParser, *, require_agent: bool = False) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--task-id", required=True)
+    if require_agent:
+        parser.add_argument("--agent", required=True)
+
+
 def command_status(args: argparse.Namespace) -> int:
     agent = safe_id(args.agent, "agent")
     task_id = safe_id(args.task_id, "task_id")
@@ -713,6 +975,17 @@ def main(argv: list[str] | None = None) -> int:
     task_list.add_argument("--workspace", default=".")
     task_list.add_argument("--state-root")
     task_list.add_argument("--plan-id")
+    plan_approve = sub.add_parser("plan-approve")
+    plan_approve.add_argument("--workspace", default=".")
+    plan_approve.add_argument("--state-root")
+    plan_approve.add_argument("--plan-id", required=True)
+    assign = sub.add_parser("assign")
+    assignment_parser(assign, require_agent=True)
+    unassign = sub.add_parser("unassign")
+    assignment_parser(unassign)
+    reconcile = sub.add_parser("reconcile")
+    reconcile.add_argument("--workspace", default=".")
+    reconcile.add_argument("--state-root")
     checkpoint = sub.add_parser("checkpoint")
     checkpoint.add_argument("--workspace", default=".")
     checkpoint.add_argument("--state-root")
@@ -739,6 +1012,14 @@ def main(argv: list[str] | None = None) -> int:
             return command_task_create(args)
         if args.command == "task-list":
             return command_task_list(args)
+        if args.command == "plan-approve":
+            return command_plan_approve(args)
+        if args.command == "assign":
+            return command_assign(args)
+        if args.command == "unassign":
+            return command_unassign(args)
+        if args.command == "reconcile":
+            return command_reconcile(args)
         if args.command == "sweep":
             return command_sweep(args)
         if args.command == "checkpoint":

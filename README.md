@@ -100,7 +100,7 @@ application repositoryのpackage.jsonから呼ぶ場合は、次のようにし�
 完了条件、test、PR、review条件もtaskごとに決めてください。
 ```
 
-現在はagentがplanとtask分割を行い、`agent-status`で状態を登録します。自動planner・自動assignerはまだ実装していません。
+現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。plan承認後の明示assignとreconcileはPhase 2で利用できます。自動planner・自動assignerはまだ実装していません。
 
 task状態の例：
 
@@ -129,6 +129,22 @@ planned → ready → in_progress → ready_for_review → done
 ```text
 要件 → plan/docs → task分割 → coding → test → PR → cross-review → 人がmerge
 ```
+
+Phase 1/2のplan・task操作例：
+
+```bash
+bin/agent-workflow status plan-create --workspace "$PWD" --plan-id plan-001 \
+  --title "短い計画名" --requirement "達成したいこと"
+bin/agent-workflow status task-create --workspace "$PWD" --task-id task-001 \
+  --plan-id plan-001 --summary "作業概要" --goal "完了条件"
+bin/agent-workflow status plan-approve --workspace "$PWD" --plan-id plan-001
+bin/agent-workflow status assign --workspace "$PWD" --task-id task-001 --agent codex
+bin/agent-workflow status reconcile --workspace "$PWD"
+```
+
+pipeline管理taskの`assign`は承認済みplanの未着手taskだけを割り当てます。legacy taskは既存互換のため
+plan承認なしでもassignできます。作業開始前の取り消しは`unassign --task-id task-001`、done/stale taskの
+再割り当ては拒否されます。
 
 手動で1件のレビューを開始する場合：
 
