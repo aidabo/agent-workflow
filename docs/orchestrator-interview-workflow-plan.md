@@ -222,6 +222,7 @@ pipeline管理task（`pipeline_managed=true`）は、人のassign承認なしに
 
 ### Phase 4: Revision loop
 
+- `revision-create`でfailure reasonとprevious evidenceを残したrevision taskを作成
 - verification failedの記録
 - revision task生成
 - 再assign・再review
