@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .provider_wrapper import PROVIDER_TIMEOUT_EXIT
 from .status import reject_secret_values, safe_id, state_root
 from .workspace_inspect import inspect_workspace
 
@@ -150,7 +151,7 @@ def run_provider(args: argparse.Namespace) -> int:
         process.communicate()
         raise ValueError(f"provider timed out after {args.timeout}s") from exc
     completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-    if completed.returncode == 124:
+    if completed.returncode == PROVIDER_TIMEOUT_EXIT:
         raise ValueError(f"provider timed out after {args.timeout}s")
     if completed.returncode != 0:
         raise ValueError(f"provider exited with {completed.returncode}")
