@@ -61,7 +61,9 @@ class OrchestratorTests(unittest.TestCase):
             (workspace / "docs" / "guide.md").write_text("# token: " + "A" * 20)
             (workspace / "input.json").write_text(json.dumps({"a": 1}))
             config = workspace / "providers.json"
-            config.write_text(json.dumps({"providers": {"test": [sys.executable, "-c", "print('{}')"]}}))
+            config.write_text(json.dumps({"providers": {"test": [
+                sys.executable, "-c", "print('{\"schema_version\":1,\"operation\":\"interview\",\"result\":{}}')",
+            ]}}))
             self.assertEqual(main([
                 "interview", "--workspace", tmp, "--provider", "test",
                 "--config", config.name, "--input", "input.json",
@@ -76,7 +78,8 @@ class OrchestratorTests(unittest.TestCase):
                     "interview", "--workspace", tmp, "--provider", "test",
                     "--config", config.name, "--input", "input.json",
                 ]), 2)
-            self.assertNotIn("secret=AAAAAAAA", error.getvalue())
+            self.assertNotIn("sk-" + "A" * 24, error.getvalue())
+            self.assertIn("provider exited with 7", error.getvalue())
 
     def test_custom_state_root_is_included_in_preflight(self):
         with tempfile.TemporaryDirectory() as tmp:
