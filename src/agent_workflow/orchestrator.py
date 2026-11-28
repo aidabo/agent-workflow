@@ -59,9 +59,13 @@ def _output_path(workspace: Path, value: str, forbidden: set[Path]) -> Path:
     return path
 
 
-def _write_result(path: Path, result: dict[str, Any]) -> None:
+def _write_result(workspace: Path, path: Path, result: dict[str, Any]) -> None:
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    if path.resolve() != path or workspace not in path.resolve().parents:
+        raise ValueError("output changed outside workspace")
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.resolve() != path or workspace not in path.resolve().parents:
+        raise ValueError("output changed outside workspace")
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         os.fchmod(fd, 0o600)
@@ -122,7 +126,7 @@ def run_provider(args: argparse.Namespace) -> int:
         raise ValueError("provider response requires a result object")
     reject_secret_values(response, "provider response")
     if output_path:
-        _write_result(output_path, response["result"])
+        _write_result(workspace, output_path, response["result"])
     print(json.dumps(response, ensure_ascii=False, indent=2))
     return 0
 
