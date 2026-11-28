@@ -265,6 +265,32 @@ def command_task_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_plan_review(args: argparse.Namespace) -> int:
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        path = plan_path(root, plan_id)
+        plan = read_object(path, "plan")
+        if plan.get("status") != "draft":
+            raise ValueError("plan-review can update draft plans only")
+        findings = [*args.critic_finding, *args.verifier_finding]
+        if args.review_status == "approved" and findings:
+            raise ValueError("a plan with findings cannot be marked approved")
+        reject_secret_values(args.critic_finding, "critic_finding")
+        reject_secret_values(args.verifier_finding, "verifier_finding")
+        plan["ai_review"] = {
+            "status": args.review_status,
+            "critic_findings": args.critic_finding,
+            "verifier_findings": args.verifier_finding,
+            "updated_at": now(),
+        }
+        plan["updated_at"] = now()
+        write_assignment_record(path, plan)
+    print(json.dumps(plan, ensure_ascii=False, indent=2))
+    return 0
+
+
 def command_planner_fixture(args: argparse.Namespace) -> int:
     requirement_id = safe_id(args.requirement_id, "requirement_id")
     plan_id = safe_id(args.plan_id, "plan_id")
@@ -1104,6 +1130,15 @@ def assignment_parser(parser: argparse.ArgumentParser, *, require_agent: bool = 
         parser.add_argument("--agent", required=True)
 
 
+def plan_review_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--review-status", choices=("pending", "approved", "changes_requested", "needs_human"), default="pending")
+    parser.add_argument("--critic-finding", action="append", default=[])
+    parser.add_argument("--verifier-finding", action="append", default=[])
+
+
 def command_status(args: argparse.Namespace) -> int:
     agent = safe_id(args.agent, "agent")
     task_id = safe_id(args.task_id, "task_id")
@@ -1262,6 +1297,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_approve.add_argument("--plan-id", required=True)
     assign = sub.add_parser("assign")
     assignment_parser(assign, require_agent=True)
+    plan_review = sub.add_parser("plan-review")
+    plan_review_parser(plan_review)
     unassign = sub.add_parser("unassign")
     assignment_parser(unassign)
     reconcile = sub.add_parser("reconcile")
@@ -1303,6 +1340,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_plan_approve(args)
         if args.command == "assign":
             return command_assign(args)
+        if args.command == "plan-review":
+            return command_plan_review(args)
         if args.command == "unassign":
             return command_unassign(args)
         if args.command == "reconcile":
