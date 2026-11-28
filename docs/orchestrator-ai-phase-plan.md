@@ -159,6 +159,6 @@ provider command自体、認証情報、会話全文はstateへ保存しない�
 7. provider adapter runner（実装済み: `bin/agent-workflow orchestrator run`。provider wrapper設定は外部command）
 8. provider-neutral interactive interview session（実装済み: `--interactive`。回答はresultへ渡し、会話全文は保存しない）
 9. 実provider wrapperの標準設定・providerごとのstructured output adapter（実装済み: `bin/agent-provider`、設定例は`docs/provider-wrappers.md`）
-10. provider role routingと複数critic/verifierのfindings集約（次Phase。interview/planのprimaryは1つ、review operationだけ複数化）
+10. provider role routingと複数critic/verifierのfindings集約（実装済み: `orchestrator fanout`。interview/planのprimaryは1つ、review operationだけ複数化）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。

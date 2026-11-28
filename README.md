@@ -163,6 +163,10 @@ bin/agent-workflow orchestrator run interview --workspace "$PWD" \
 bin/agent-workflow orchestrator run interview --workspace "$PWD" \
   --provider claude --config providers.json --interactive \
   --output clarified.json
+# critic/verifierだけ、複数providerをread-onlyで並列実行してfindingsを集約する
+bin/agent-workflow orchestrator fanout critic --workspace "$PWD" \
+  --provider claude --provider codex --provider deepseek \
+  --config providers.json --input plan.json
 # orchestrator sessionから回答fixtureをartifactへ変換する場合
 # answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
 bin/agent-workflow status requirement-interview --workspace "$PWD" \

@@ -67,7 +67,11 @@ case "$command_name" in
   monitor) exec "$root/bin/agent-monitor" "$@" ;;
   status) exec "$root/bin/agent-status" "$@" ;;
   orchestrator)
-    [[ "${1:-}" == "run" ]] || { echo "usage: bin/agent-workflow orchestrator run ..." >&2; exit 64; }
+    if [[ "${1:-}" == "fanout" ]]; then
+      shift
+      exec "$root/bin/agent-orchestrator-fanout" "$@"
+    fi
+    [[ "${1:-}" == "run" ]] || { echo "usage: bin/agent-workflow orchestrator {run|fanout} ..." >&2; exit 64; }
     shift
     exec "$root/bin/agent-orchestrator" "$@" ;;
   checkpoint)
