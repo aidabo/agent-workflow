@@ -70,6 +70,7 @@ flowchart LR
 ```
 
 `desired_outcome`と`risk_level`は既存のinterview/runbook語彙に合わせる。plan JSONのusers/scope/acceptance criteriaは、このartifactから転記し、`requirement_id`も保持する。
+`acceptance_criteria`が空、または`open_questions`が残る場合は`needs_clarification`、両方が満たされる場合は`clarified`になる。`round`は1以上で、未完了interviewには`completed_at`を付けない。
 
 secret、token、password、pane入力、LLM会話全文は保存しない。既存のsafe ID、secret拒否、atomic write、0700/0600を再利用する。
 

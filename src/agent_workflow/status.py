@@ -61,6 +61,10 @@ def plan_path(root: Path, plan_id: str) -> Path:
     return path_for(root, "plans", plan_id)
 
 
+def requirement_path(root: Path, requirement_id: str) -> Path:
+    return path_for(root, "requirements", requirement_id)
+
+
 def read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -246,6 +250,45 @@ def command_task_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_requirement_create_impl(args: argparse.Namespace) -> int:
+    requirement_id = safe_id(args.requirement_id, "requirement_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    path = requirement_path(root, requirement_id)
+    if args.round < 1:
+        raise ValueError("round must be at least 1")
+    status = "needs_clarification" if args.open_questions or not args.acceptance_criteria else "clarified"
+    interview = {"mode": args.interview_mode, "round": args.round}
+    interview["completed_at" if status == "clarified" else "recorded_at"] = now()
+    values = {
+        "requirement_id": requirement_id, "status": status,
+        "background": args.background, "users": args.users, "problem": args.problem,
+        "desired_outcome": args.desired_outcome, "scope": args.scope,
+        "non_goals": args.non_goals, "constraints": args.constraints,
+        "acceptance_criteria": args.acceptance_criteria,
+        "open_questions": args.open_questions, "assumptions": args.assumptions,
+        "risk_level": args.risk_level,
+        "interview": interview,
+        "created_at": now(), "updated_at": now(),
+    }
+    for key, value in values.items():
+        reject_secret_values(value, key)
+    existing = None
+    if path.exists() and not args.force:
+        raise ValueError(f"requirement already exists: {requirement_id} (use --force to replace)")
+    if path.exists():
+        existing = read_json(path)
+        if not isinstance(existing, dict):
+            raise ValueError("cannot replace a malformed requirement")
+        if existing.get("status") in {"approved", "clarified"}:
+            raise ValueError("--force cannot replace an approved or clarified requirement")
+        if existing.get("created_at"):
+            values["created_at"] = existing["created_at"]
+    atomic_write(path, values)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
 def command_revision_create(args: argparse.Namespace) -> int:
     source_id = safe_id(args.source_task_id, "source_task_id")
     task_id = safe_id(args.task_id, "task_id")
@@ -309,6 +352,13 @@ def assignment_lock(root: Path):
             yield
         finally:
             fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+
+
+def command_requirement_create(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        return _command_requirement_create_impl(args)
 
 
 def write_assignment_record(path: Path, record: dict[str, Any]) -> None:
@@ -894,6 +944,26 @@ def plan_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
 
 
+def requirement_create_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--requirement-id", required=True)
+    parser.add_argument("--background", required=True)
+    parser.add_argument("--users", action="append", default=[])
+    parser.add_argument("--problem", required=True)
+    parser.add_argument("--desired-outcome", required=True)
+    parser.add_argument("--scope", action="append", default=[])
+    parser.add_argument("--non-goals", action="append", default=[])
+    parser.add_argument("--constraints", action="append", default=[])
+    parser.add_argument("--acceptance-criteria", action="append", default=[])
+    parser.add_argument("--open-questions", action="append", default=[])
+    parser.add_argument("--assumptions", action="append", default=[])
+    parser.add_argument("--risk-level", choices=("low", "medium", "high"), default="medium")
+    parser.add_argument("--interview-mode", choices=("skip", "targeted", "full"), default="targeted")
+    parser.add_argument("--round", type=int, default=1)
+    parser.add_argument("--force", action="store_true")
+
+
 def task_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -1067,6 +1137,8 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--task-file")
     plan_create = sub.add_parser("plan-create")
     plan_parser(plan_create)
+    requirement_create = sub.add_parser("requirement-create")
+    requirement_create_parser(requirement_create)
     task_create = sub.add_parser("task-create")
     task_create_parser(task_create)
     revision_create = sub.add_parser("revision-create")
@@ -1108,6 +1180,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_context(args)
         if args.command == "plan-create":
             return command_plan_create(args)
+        if args.command == "requirement-create":
+            return command_requirement_create(args)
         if args.command == "task-create":
             return command_task_create(args)
         if args.command == "revision-create":
