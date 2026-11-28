@@ -4,10 +4,11 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
-from .status import reject_secret_values, safe_id
+from .status import reject_secret_values, safe_id, state_root
 from .workspace_inspect import inspect_workspace
 
 
@@ -53,7 +54,8 @@ def run_provider(args: argparse.Namespace) -> int:
     input_path = _workspace_file(workspace, args.input, "input")
     config_path = _workspace_file(workspace, args.config, "config")
     payload = _read_object(input_path, "provider input")
-    preflight = inspect_workspace(workspace, args.docs_dir, workspace / ".agent-workflow" / "state", args.max_files)
+    preflight = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
+    reject_secret_values(preflight, "preflight")
     request = {
         "schema_version": 1,
         "operation": args.operation,
@@ -76,7 +78,7 @@ def run_provider(args: argparse.Namespace) -> int:
     except subprocess.TimeoutExpired as exc:
         raise ValueError(f"provider timed out after {args.timeout}s") from exc
     if completed.returncode != 0:
-        raise ValueError(f"provider exited with {completed.returncode}: {completed.stderr[-400:]}")
+        raise ValueError(f"provider exited with {completed.returncode}")
     try:
         response = json.loads(completed.stdout)
     except (ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -96,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent-orchestrator")
     parser.add_argument("operation", choices=sorted(OPERATIONS))
     parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
     parser.add_argument("--docs-dir", default="docs")
     parser.add_argument("--provider", required=True)
     parser.add_argument("--config", required=True)
@@ -108,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("timeout must be between 1 and 3600")
         return run_provider(args)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"agent-orchestrator: {exc}", file=os.sys.stderr)
+        print(f"agent-orchestrator: {exc}", file=sys.stderr)
         return 2
 
 

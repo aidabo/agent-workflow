@@ -98,7 +98,7 @@ Phase 7のadapter runnerは、provider固有wrapperを設定から実行する�
 }
 ```
 
-wrapperは`schema_version`、同じ`operation`、objectの`result`を持つJSONをstdoutへ返す。runnerはshellを経由せず、timeout・入力path・出力schema・secretを検証する。provider command自体、認証情報、会話全文はstateへ保存しない。
+wrapperは`schema_version`、同じ`operation`、objectの`result`を持つJSONをstdoutへ返す。runnerはshellを経由せず、timeout・入力path・custom state root・出力schema・preflightを含むsecretを検証する。provider command自体、認証情報、会話全文はstateへ保存しない。commandは環境変数を引き継ぐため、provider configは信頼できるworkspaceに限定する。
 
 ## workspace preflight
 
