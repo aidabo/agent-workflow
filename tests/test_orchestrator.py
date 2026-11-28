@@ -100,6 +100,39 @@ class OrchestratorTests(unittest.TestCase):
                 ]), 0)
             self.assertEqual(json.loads(output.getvalue())["result"]["by_status"], {"clarified": 1})
 
+    def test_output_persists_only_validated_result_with_private_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            (workspace / "input.json").write_text(json.dumps({"a": 1}))
+            config = workspace / "providers.json"
+            command = [sys.executable, "-c", "import json,sys; r=json.load(sys.stdin); print(json.dumps({'schema_version':1,'operation':r['operation'],'result':{'desired_outcome':'O'}}))"]
+            config.write_text(json.dumps({"providers": {"test": command}}))
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test",
+                    "--config", config.name, "--input", "input.json", "--output", "clarified.json",
+                ]), 0)
+            result = json.loads((workspace / "clarified.json").read_text())
+            self.assertEqual(result, {"desired_outcome": "O"})
+            self.assertEqual((workspace / "clarified.json").stat().st_mode & 0o777, 0o600)
+            self.assertNotIn("preflight", (workspace / "clarified.json").read_text())
+
+    def test_output_cannot_overwrite_input_or_provider_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            (workspace / "input.json").write_text(json.dumps({"a": 1}))
+            config = workspace / "providers.json"
+            command = [sys.executable, "-c", "import json,sys; r=json.load(sys.stdin); print(json.dumps({'schema_version':1,'operation':r['operation'],'result':{}}))"]
+            config.write_text(json.dumps({"providers": {"test": command}}))
+            for output in ("input.json", "providers.json"):
+                self.assertEqual(main([
+                    "plan", "--workspace", tmp, "--provider", "test",
+                    "--config", config.name, "--input", "input.json", "--output", output,
+                ]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

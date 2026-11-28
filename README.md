@@ -157,11 +157,12 @@ AI orchestratorのfixture運用例：
 bin/agent-workflow status workspace-inspect --workspace "$PWD" --docs-dir docs
 # provider wrapperへpreflight付きの要件入力を渡す（入力/configはworkspace相対）
 bin/agent-workflow orchestrator run interview --workspace "$PWD" \
-  --provider claude --config providers.json --input answers.json
+  --provider claude --config providers.json --input answers.json \
+  --output clarified.json
 # orchestrator sessionから回答fixtureをartifactへ変換する場合
 # answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
 bin/agent-workflow status requirement-interview --workspace "$PWD" \
-  --requirement-id req-001 --input answers.json --interview-mode targeted --round 1
+  --requirement-id req-001 --input clarified.json --interview-mode targeted --round 1
 bin/agent-workflow status planner-fixture --workspace "$PWD" \
   --requirement-id req-001 --plan-id plan-001 --input planner.json
 bin/agent-workflow status plan-review --workspace "$PWD" --plan-id plan-001 \
