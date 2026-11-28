@@ -64,6 +64,20 @@ class StatusTests(unittest.TestCase):
                 "plan-create", "--workspace", tmp, "--plan-id", "plan-2",
                 "--title", "Blocked", "--requirement-id", "req-missing",
             ]), 2)
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C", "--open-questions", "Q",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-3",
+                "--title", "Blocked", "--requirement-id", "req-open",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-4",
+                "--title", "Blocked",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
 
     def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -89,20 +103,6 @@ class StatusTests(unittest.TestCase):
                 "--plan-id", "plan-fixture-2", "--input", "planner.json",
             ]), 2)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-fixture-2.json").exists())
-            self.assertEqual(main([
-                "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
-                "--background", "B", "--problem", "P", "--desired-outcome", "O",
-                "--acceptance-criteria", "C", "--open-questions", "Q",
-            ]), 0)
-            self.assertEqual(main([
-                "plan-create", "--workspace", tmp, "--plan-id", "plan-3",
-                "--title", "Blocked", "--requirement-id", "req-open",
-            ]), 2)
-            self.assertEqual(main([
-                "plan-create", "--workspace", tmp, "--plan-id", "plan-4",
-                "--title", "Blocked",
-            ]), 2)
-            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
 
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:

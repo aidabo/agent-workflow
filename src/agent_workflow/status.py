@@ -298,7 +298,10 @@ def command_planner_fixture(args: argparse.Namespace) -> int:
         for item in fixture["tasks"]:
             if not isinstance(item, dict):
                 raise ValueError("planner fixture tasks must be objects")
-            task_id = safe_id(item.get("task_id"), "task_id")
+            raw_task_id = item.get("task_id")
+            if not isinstance(raw_task_id, str):
+                raise ValueError("planner fixture task_id must be a string")
+            task_id = safe_id(raw_task_id, "task_id")
             if any(task["task_id"] == task_id for task in tasks):
                 raise ValueError(f"duplicate fixture task: {task_id}")
             if not isinstance(item.get("summary"), str) or not isinstance(item.get("goal"), str):
