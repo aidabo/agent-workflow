@@ -28,4 +28,4 @@ bin/agent-workflow orchestrator fanout critic --workspace "$PWD" \
   --config providers.json --input plan.json
 ```
 
-出力は`orchestrator-findings/critic-findings.json`に0600で保存される。各findingにはprovider、operation、preflightのgit HEAD、resultが含まれる。resultが一致しない場合はstatusが`needs_human`になり、自動approve/assignは行わない。
+出力は`orchestrator-findings/critic-findings.json`に0600で保存される。各findingにはprovider、operation、preflightのgit HEADが含まれ、成功時は`result`、失敗時は`error`を持つ。全providerのresultが一致してもstatusは`pending`（自動approve/assignはしない）で、result不一致、provider失敗、実行中のHEAD変更がある場合は`needs_human`になる。

@@ -59,8 +59,12 @@ class ProviderFanoutTests(unittest.TestCase):
             self.assertEqual(aggregate["status"], "needs_human")
             self.assertTrue(any(item.get("error") for item in aggregate["findings"]))
             self.assertEqual(main([
-                "critic", "--workspace", tmp, "--provider", "critic-findings",
-                "--config", config.name, "--input", "input.json", "--output", "orchestrator-findings/critic-findings.json",
+                "critic", "--workspace", tmp, "--provider", "good",
+                "--config", config.name, "--input", "input.json", "--output", "orchestrator-findings/good.json",
+            ]), 2)
+            self.assertEqual(main([
+                "critic", "--workspace", tmp, "--provider", "Good", "--provider", "good",
+                "--config", config.name, "--input", "input.json",
             ]), 2)
 
 
