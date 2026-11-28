@@ -15,6 +15,7 @@ from .workspace_inspect import inspect_workspace
 
 
 OPERATIONS = {"interview", "plan", "critic", "verifier"}
+WRAPPER_TIMEOUT_MARGIN = 5
 
 
 def _workspace_file(workspace: Path, value: str, label: str) -> Path:
@@ -135,7 +136,7 @@ def run_provider(args: argparse.Namespace) -> int:
     }
     command = _provider_command(config_path, provider)
     provider_env = os.environ.copy()
-    provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(max(1, args.timeout - 5))
+    provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(args.timeout - WRAPPER_TIMEOUT_MARGIN)
     process = subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, cwd=workspace, env=provider_env, start_new_session=True,
@@ -149,6 +150,8 @@ def run_provider(args: argparse.Namespace) -> int:
         process.communicate()
         raise ValueError(f"provider timed out after {args.timeout}s") from exc
     completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    if completed.returncode == 124:
+        raise ValueError(f"provider timed out after {args.timeout}s")
     if completed.returncode != 0:
         raise ValueError(f"provider exited with {completed.returncode}")
     try:
@@ -184,8 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=300)
     try:
         args = parser.parse_args(argv)
-        if args.timeout < 1 or args.timeout > 3600:
-            raise ValueError("timeout must be between 1 and 3600")
+        if args.timeout <= WRAPPER_TIMEOUT_MARGIN or args.timeout > 3600:
+            raise ValueError(f"timeout must be between {WRAPPER_TIMEOUT_MARGIN + 1} and 3600")
         return run_provider(args)
     except (OSError, ValueError, EOFError, json.JSONDecodeError) as exc:
         print(f"agent-orchestrator: {exc}", file=sys.stderr)

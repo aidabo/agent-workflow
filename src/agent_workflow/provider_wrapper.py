@@ -16,6 +16,11 @@ Use the supplied workspace preflight and payload. Return only a JSON object cont
 The result must be suitable for the operation named in the request. For interview, include background,
 problem, desired_outcome, users, scope, non_goals, constraints, acceptance_criteria, open_questions,
 assumptions, and risk_level."""
+PROVIDER_TIMEOUT_EXIT = 124
+
+
+class ProviderTimeout(RuntimeError):
+    pass
 
 
 def _json_document(text: str) -> Any:
@@ -43,14 +48,14 @@ def _run_process(command: list[str], prompt: str, workspace: Path) -> subprocess
     timeout = int(os.environ.get("AGENT_WORKFLOW_WRAPPER_TIMEOUT", "300"))
     process = subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, cwd=workspace,
+        text=True, cwd=workspace, start_new_session=True,
     )
     try:
         stdout, stderr = process.communicate(prompt, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         process.kill()
         process.communicate()
-        raise RuntimeError("provider wrapper timed out") from exc
+        raise ProviderTimeout("provider wrapper timed out") from exc
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
@@ -142,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
         request = json.load(sys.stdin)
         print(json.dumps(run(argv[0], request), ensure_ascii=False))
         return 0
+    except ProviderTimeout as exc:
+        print(f"agent-provider: {exc}", file=sys.stderr)
+        return PROVIDER_TIMEOUT_EXIT
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"agent-provider: {exc}", file=sys.stderr)
         return 2
