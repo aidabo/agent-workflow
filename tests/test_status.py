@@ -86,6 +86,10 @@ class StatusTests(unittest.TestCase):
                 "--title", "Plan", "--requirement", "Requirement",
             ]), 0)
             self.assertEqual(main([
+                "task-create", "--workspace", tmp, "--task-id", "task-1", "--plan-id", "plan-1",
+                "--summary", "Work", "--goal", "Done",
+            ]), 0)
+            self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1",
                 "--review-status", "changes_requested", "--critic-finding", "Scope too broad",
                 "--verifier-finding", "Missing test evidence",
@@ -97,8 +101,8 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
             self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
-            ]), 2)
-            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
+            ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 0)
 
     def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -278,8 +278,12 @@ def command_plan_review(args: argparse.Namespace) -> int:
         reject_secret_values(args.critic_finding, "critic_finding")
         reject_secret_values(args.verifier_finding, "verifier_finding")
         previous = plan.get("ai_review") if isinstance(plan.get("ai_review"), dict) else {}
-        critic_findings = args.critic_finding or previous.get("critic_findings", [])
-        verifier_findings = args.verifier_finding or previous.get("verifier_findings", [])
+        if args.review_status == "approved":
+            critic_findings = []
+            verifier_findings = []
+        else:
+            critic_findings = args.critic_finding or previous.get("critic_findings", [])
+            verifier_findings = args.verifier_finding or previous.get("verifier_findings", [])
         if args.review_status == "approved" and [*critic_findings, *verifier_findings]:
             raise ValueError("a plan with findings cannot be marked approved")
         plan["ai_review"] = {
