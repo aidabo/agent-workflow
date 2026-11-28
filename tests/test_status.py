@@ -103,6 +103,22 @@ class StatusTests(unittest.TestCase):
                 "--plan-id", "plan-fixture-2", "--input", "planner.json",
             ]), 2)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-fixture-2.json").exists())
+            invalid_risk = Path(tmp) / "invalid-risk.json"
+            invalid_risk.write_text(json.dumps({"risk_level": [], "tasks": [
+                {"task_id": "task-b", "summary": "Inspect", "goal": "Done"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-invalid-risk", "--input", "invalid-risk.json",
+            ]), 2)
+            invalid_task = Path(tmp) / "invalid-task.json"
+            invalid_task.write_text(json.dumps({"tasks": [
+                {"task_id": 1, "summary": "Inspect", "goal": "Done"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-invalid-task", "--input", "invalid-task.json",
+            ]), 2)
 
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:

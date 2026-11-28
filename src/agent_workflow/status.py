@@ -39,7 +39,7 @@ def now() -> str:
 
 
 def safe_id(value: str, label: str) -> str:
-    if not value or value in {".", ".."} or not SAFE_ID.fullmatch(value):
+    if not isinstance(value, str) or not value or value in {".", ".."} or not SAFE_ID.fullmatch(value):
         raise ValueError(f"invalid {label}: use only A-Z/a-z/0-9/._- and never . or ..")
     return value
 
@@ -292,7 +292,7 @@ def command_planner_fixture(args: argparse.Namespace) -> int:
         if not isinstance(fixture.get("title", plan_id), str):
             raise ValueError("planner fixture title must be a string")
         fixture_risk = fixture.get("risk_level", requirement.get("risk_level", "medium"))
-        if fixture_risk not in {"low", "medium", "high"}:
+        if not isinstance(fixture_risk, str) or fixture_risk not in {"low", "medium", "high"}:
             raise ValueError("planner fixture risk_level must be low, medium, or high")
         tasks = []
         for item in fixture["tasks"]:
