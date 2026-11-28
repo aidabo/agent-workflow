@@ -101,6 +101,10 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
             self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+                "--critic-finding", "new finding",
+            ]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
             ]), 2)
             self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",

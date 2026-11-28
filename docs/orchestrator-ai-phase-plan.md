@@ -88,6 +88,7 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 ## 承認・安全境界
 
 - **既存**: `open_questions`が残る場合、orchestratorは勝手に仮定を確定しない
+- **既存**: `plan-approve`は`ai_review.status=approved`でないplan-review済みplanを拒否する。`ai_review`がないlegacy planは後方互換で許可する。
 - **Phase実装予定**: `plan-approve`はplanの`requirement_id`を辿り、open_questionsと未解決のCritic/Verifier findingsが残る場合に拒否する
 - **既存**: plan-approveは人の明示操作
 - **既存**: pipeline管理taskのassignはapproved planの未着手taskだけに限定される。legacy taskは既存互換のためplan承認なしでもassignできる

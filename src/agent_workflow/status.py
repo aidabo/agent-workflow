@@ -279,6 +279,8 @@ def command_plan_review(args: argparse.Namespace) -> int:
             raise ValueError("plan-review can update draft plans only")
         reject_secret_values(args.critic_finding, "critic_finding")
         reject_secret_values(args.verifier_finding, "verifier_finding")
+        if args.review_status == "approved" and (args.critic_finding or args.verifier_finding):
+            raise ValueError("approved review cannot include new findings; use --clear-findings after resolution")
         raw_previous = plan.get("ai_review")
         if raw_previous is not None and not isinstance(raw_previous, dict):
             raise ValueError("plan has malformed ai_review")
