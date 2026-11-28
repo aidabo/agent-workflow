@@ -28,6 +28,7 @@ flowchart LR
 
 ### orchestrator session
 
+- interviewを始める前に、対象workspaceのgit/source構成、`docs/**`の一覧・見出し、既存のrequirement/plan/task状態を読み取る
 - 背景、利用者、困りごと、期待結果、対象外、制約、完了条件を一問ずつ確認する
 - 曖昧な点を`open_questions`として残す
 - 仮定と人の承認状態を保存する
@@ -85,6 +86,20 @@ output: plan draft + task drafts + assumptions + critic/verifier findings
 
 provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まない。provider障害時はdraft生成を中断し、既存taskを変更しない。
 
+## workspace preflight
+
+`workspace-inspect`はorchestratorの要件確認・task企画前に実行する読み取り専用のpreflightである。
+
+- gitのbranch、HEAD、dirty状態を確認する
+- workspace直下のsource directoryと主要manifestを確認する
+- `docs/**`の相対path、サイズ、Markdown見出しを確認する（本文は出力しない）
+- 既存のrequirement/plan/taskをstatus別の件数で確認する
+- `.git`、`.agent-workflow`、`node_modules`、build成果物、hidden directoryは走査しない
+- docs pathはworkspace内に限定し、一覧が大きい場合は上限とwarningを返す
+
+この結果はproviderへ渡す前提情報であり、state・product code・taskを変更しない。secretや会話全文をpreflight artifactとして保存しない。
+出力の`schema_version`は1から始め、provider adapterが互換性を判断できるよう、キー構造を変更するときはversionを上げる。
+
 ## 承認・安全境界
 
 - **既存**: `open_questions`が残る場合、orchestratorは勝手に仮定を確定しない
@@ -98,11 +113,12 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 
 ## 実装段階
 
-1. requirement artifactの保存・検証CLI（実装済み）
-2. orchestrator sessionからartifactを作るprovider非依存の回答入口（実装済み: `requirement-interview`。対話UI/provider接続は未実装）
-3. planner adapterのprovider非依存fixture（実装済み）
-4. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
-5. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
-6. 実provider adapterとinteractive session（未実装）
+1. workspace/source/docs preflight（実装済み: `workspace-inspect`）
+2. requirement artifactの保存・検証CLI（実装済み）
+3. orchestrator sessionからartifactを作るprovider非依存の回答入口（実装済み: `requirement-interview`。対話UI/provider接続は未実装）
+4. planner adapterのprovider非依存fixture（実装済み）
+5. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
+6. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
+7. 実provider adapterとinteractive session（未実装）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。

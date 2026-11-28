@@ -1383,6 +1383,20 @@ def command_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_workspace_inspect(args: argparse.Namespace) -> int:
+    from .workspace_inspect import inspect_workspace
+
+    workspace = Path(args.workspace).expanduser().resolve()
+    result = inspect_workspace(
+        workspace,
+        args.docs_dir,
+        state_root(workspace, args.state_root),
+        args.max_files,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent-status")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1399,6 +1413,11 @@ def main(argv: list[str] | None = None) -> int:
     context.add_argument("--context-file", required=True)
     context.add_argument("--project")
     context.add_argument("--task-file")
+    workspace_inspect = sub.add_parser("workspace-inspect")
+    workspace_inspect.add_argument("--workspace", default=".")
+    workspace_inspect.add_argument("--state-root")
+    workspace_inspect.add_argument("--docs-dir", default="docs")
+    workspace_inspect.add_argument("--max-files", type=int, default=200)
     plan_create = sub.add_parser("plan-create")
     plan_parser(plan_create)
     requirement_create = sub.add_parser("requirement-create")
@@ -1452,6 +1471,8 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
         if args.command == "context":
             return command_context(args)
+        if args.command == "workspace-inspect":
+            return command_workspace_inspect(args)
         if args.command == "plan-create":
             return command_plan_create(args)
         if args.command == "requirement-create":
