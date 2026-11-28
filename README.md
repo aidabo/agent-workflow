@@ -100,7 +100,7 @@ application repositoryのpackage.jsonから呼ぶ場合は、次のようにし�
 完了条件、test、PR、review条件もtaskごとに決めてください。
 ```
 
-現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。要件回答をartifact化するprovider非依存の`requirement-interview`と、fixture planner、plan review gateが利用できます。plan承認後の明示assignとreconcileも利用できます。実provider adapterと対話型provider sessionは次Phaseです（[AI Orchestrator Phase plan](docs/orchestrator-ai-phase-plan.md)）。
+現在はagentがplanとtask分割を行い、`agent-status`でdraftを保存します。orchestratorは要件確認前にworkspaceのソース構成・`docs/**`・既存workflow stateを読み取れます。要件回答をartifact化するprovider非依存の`requirement-interview`と、fixture planner、plan review gateも利用できます。plan承認後の明示assignとreconcileも利用できます。実provider adapterと対話型provider sessionは次Phaseです（[AI Orchestrator Phase plan](docs/orchestrator-ai-phase-plan.md)）。
 
 task状態の例：
 
@@ -151,6 +151,8 @@ bin/agent-workflow status reconcile --workspace "$PWD"
 AI orchestratorのfixture運用例：
 
 ```bash
+# 要件確認の前に、対象workspaceのsource/docs/stateを確認する（読み取り専用）
+bin/agent-workflow status workspace-inspect --workspace "$PWD" --docs-dir docs
 # orchestrator sessionから回答fixtureをartifactへ変換する場合
 # answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
 bin/agent-workflow status requirement-interview --workspace "$PWD" \
