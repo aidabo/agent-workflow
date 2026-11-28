@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from agent_workflow.context import resolve_context
 from agent_workflow.monitor_data import format_task_lines
-from agent_workflow.status import atomic_write, main, sweep_stale
+from agent_workflow.status import atomic_write, latest_review, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
@@ -430,6 +430,12 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(task["review"]["head_sha"], "commit-a")
             checkpoint = json.loads((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").read_text())
             self.assertEqual(checkpoint["review"]["status"], "changes_requested")
+
+    def test_latest_review_prefers_newer_evidence(self):
+        self.assertEqual(latest_review(
+            {"status": "approved", "updated_at": "2026-01-01T00:00:00+00:00"},
+            {"status": "changes_requested", "updated_at": "2026-01-02T00:00:00+00:00"},
+        )["status"], "changes_requested")
 
     def test_heartbeat_preserves_human_state_and_recovers_stale(self):
         with tempfile.TemporaryDirectory() as tmp:
