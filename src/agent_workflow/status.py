@@ -619,7 +619,15 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
         record = {} if reset else read_json(path)
         for field in clear_fields or set():
             record.pop(field, None)
-        record.update({key: value for key, value in updates.items() if value is not None})
+        for key, value in updates.items():
+            if value is None:
+                continue
+            if key == "review" and isinstance(value, dict):
+                previous_review = record.get("review") if isinstance(record.get("review"), dict) else {}
+                merged_review = {**previous_review, **{k: v for k, v in value.items() if v is not None}}
+                record[key] = merged_review
+            else:
+                record[key] = value
         record["updated_at"] = now()
         atomic_write(path, record)
         return record
@@ -956,10 +964,9 @@ def command_status(args: argparse.Namespace) -> int:
         "updated_at": timestamp,
     }
     if args.review_status or args.review_summary:
-        previous_review = previous_task.get("review") if isinstance(previous_task.get("review"), dict) else {}
         task_updates["review"] = {
-            "status": args.review_status or previous_review.get("status", "pending"),
-            "summary": args.review_summary or previous_review.get("summary"),
+            "status": args.review_status,
+            "summary": args.review_summary,
             "updated_at": timestamp,
         }
     previous_active = set(previous_agent.get("active_task_ids", []))
@@ -981,6 +988,7 @@ def command_status(args: argparse.Namespace) -> int:
     task = merge_record(
         task_path, task_updates,
         clear_fields={"blocked_reason"} if args.clear_blocked else set(),
+        lock=True,
     )
     agent_record = merge_record(
         agent_path, agent_updates,
