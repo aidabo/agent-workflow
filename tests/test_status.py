@@ -31,6 +31,8 @@ class StatusTests(unittest.TestCase):
             self.assertNotIn("completed_at", record["interview"])
             self.assertIn("recorded_at", record["interview"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(main(["requirement-show", "--workspace", tmp, "--requirement-id", "req-1"]), 0)
+            self.assertEqual(main(["requirement-list", "--workspace", tmp, "--status", "needs_clarification"]), 0)
 
     def test_requirement_without_acceptance_criteria_needs_clarification_and_round_is_positive(self):
         with tempfile.TemporaryDirectory() as tmp:
