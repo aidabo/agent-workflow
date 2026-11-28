@@ -41,6 +41,23 @@ class StatusTests(unittest.TestCase):
                 "--title", "Test", "--requirement", "Do thing",
                 "--acceptance-criteria", "sk-secret-value-that-must-not-save",
             ]), 2)
+
+    def test_revision_create_preserves_source_task_and_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["plan-create", "--workspace", tmp, "--plan-id", "p", "--title", "P", "--requirement", "R"]), 0)
+            self.assertEqual(main(["task-create", "--workspace", tmp, "--task-id", "t", "--plan-id", "p", "--summary", "S", "--goal", "G"]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "p"]), 0)
+            self.assertEqual(main([
+                "revision-create", "--workspace", tmp, "--source-task-id", "t", "--task-id", "t-r1",
+                "--summary", "Fix", "--goal", "Fixed", "--failure-reason", "verification failed",
+                "--previous-evidence", "test log",
+            ]), 0)
+            root = Path(tmp) / ".agent-workflow/state/tasks"
+            source = json.loads((root / "t.json").read_text())
+            revision = json.loads((root / "t-r1.json").read_text())
+            self.assertEqual((revision["previous_task_id"], revision["revision"]), ("t", 1))
+            self.assertEqual(revision["previous_evidence"], ["test log"])
+            self.assertIsNone(source["agent"])
             self.assertEqual(main([
                 "plan-create", "--workspace", tmp, "--plan-id", "plan-1",
                 "--title", "Test", "--requirement", "Do thing",

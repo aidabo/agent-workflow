@@ -214,6 +214,7 @@ agent-status task-show --task task-001
 
 ### Phase 4: review連携
 
+- `revision-create`でverification failedから元taskを上書きせずrevision taskを作成
 - taskのPR/headを記録
 - cross-review状態をtaskの完了条件へ反映
 - NEEDS YOUをtask stateへ反映するが、自動修正・自動mergeはしない

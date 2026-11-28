@@ -245,6 +245,47 @@ def command_task_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_revision_create(args: argparse.Namespace) -> int:
+    source_id = safe_id(args.source_task_id, "source_task_id")
+    task_id = safe_id(args.task_id, "task_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    with assignment_lock(root):
+        source = read_object(path_for(root, "tasks", source_id), "source task")
+        if source.get("state") == "done" or source.get("task_status") == "done":
+            raise ValueError("cannot create a revision from a completed task")
+        if source.get("pipeline_managed") is not True:
+            raise ValueError("revision tasks require a pipeline-managed source task")
+        target = path_for(root, "tasks", task_id)
+        if target.exists():
+            raise ValueError(f"task already exists: {task_id}")
+        plan_id = source.get("plan_id")
+        plan = read_object(plan_path(root, plan_id), "plan") if isinstance(plan_id, str) else {}
+        if plan.get("status") != "approved":
+            raise ValueError(f"plan {plan_id} must be approved before creating a revision")
+        revision = source.get("revision", 0)
+        if not isinstance(revision, int) or revision < 0:
+            raise ValueError("source task has invalid revision")
+        values = {
+            "task_id": task_id, "plan_id": plan_id, "agent": None,
+            "summary": args.summary, "goal": args.goal, "next_action": args.next_action,
+            "acceptance_criteria": source.get("acceptance_criteria", []), "phase": "docs",
+            "state": "idle", "task_status": "ready", "pipeline_managed": True,
+            "revision": revision + 1, "previous_task_id": source_id,
+            "failure_reason": args.failure_reason, "previous_evidence": args.previous_evidence,
+            "created_at": now(), "updated_at": now(),
+        }
+        for key, value in values.items():
+            reject_secret_values(value, key)
+        write_assignment_record(target, values)
+        task_ids = plan.get("task_ids") if isinstance(plan.get("task_ids"), list) else []
+        plan["task_ids"] = [*task_ids, task_id]
+        plan["updated_at"] = now()
+        write_assignment_record(plan_path(root, plan_id), plan)
+    print(json.dumps(values, ensure_ascii=False, indent=2))
+    return 0
+
+
 @contextmanager
 def assignment_lock(root: Path):
     root.mkdir(parents=True, exist_ok=True)
@@ -831,6 +872,18 @@ def task_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
 
 
+def revision_create_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--source-task-id", required=True)
+    parser.add_argument("--task-id", required=True)
+    parser.add_argument("--summary", required=True)
+    parser.add_argument("--goal", required=True)
+    parser.add_argument("--next-action")
+    parser.add_argument("--failure-reason", required=True)
+    parser.add_argument("--previous-evidence", action="append", default=[])
+
+
 def assignment_parser(parser: argparse.ArgumentParser, *, require_agent: bool = False) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -971,6 +1024,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser(plan_create)
     task_create = sub.add_parser("task-create")
     task_create_parser(task_create)
+    revision_create = sub.add_parser("revision-create")
+    revision_create_parser(revision_create)
     task_list = sub.add_parser("task-list")
     task_list.add_argument("--workspace", default=".")
     task_list.add_argument("--state-root")
@@ -1010,6 +1065,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_plan_create(args)
         if args.command == "task-create":
             return command_task_create(args)
+        if args.command == "revision-create":
+            return command_revision_create(args)
         if args.command == "task-list":
             return command_task_list(args)
         if args.command == "plan-approve":
