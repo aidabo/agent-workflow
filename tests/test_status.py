@@ -64,6 +64,15 @@ class StatusTests(unittest.TestCase):
                 "plan-create", "--workspace", tmp, "--plan-id", "plan-2",
                 "--title", "Blocked", "--requirement-id", "req-missing",
             ]), 2)
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C", "--open-questions", "Q",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-3",
+                "--title", "Blocked", "--requirement-id", "req-open",
+            ]), 2)
 
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
