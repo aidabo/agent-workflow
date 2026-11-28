@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import sys
@@ -31,6 +33,26 @@ class StatusTests(unittest.TestCase):
             self.assertNotIn("completed_at", record["interview"])
             self.assertIn("recorded_at", record["interview"])
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            show_output = io.StringIO()
+            with contextlib.redirect_stdout(show_output):
+                self.assertEqual(main(["requirement-show", "--workspace", tmp, "--requirement-id", "req-1"]), 0)
+            self.assertEqual(json.loads(show_output.getvalue())["requirement_id"], "req-1")
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--open-questions", "Q",
+            ]), 0)
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-clarified",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C",
+            ]), 0)
+            list_output = io.StringIO()
+            with contextlib.redirect_stdout(list_output):
+                self.assertEqual(main(["requirement-list", "--workspace", tmp, "--status", "needs_clarification"]), 0)
+            listed = json.loads(list_output.getvalue())
+            self.assertEqual([record["requirement_id"] for record in listed], ["req-1", "req-open"])
+            self.assertEqual(main(["requirement-show", "--workspace", tmp, "--requirement-id", "missing"]), 2)
 
     def test_requirement_without_acceptance_criteria_needs_clarification_and_round_is_positive(self):
         with tempfile.TemporaryDirectory() as tmp:

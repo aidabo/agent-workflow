@@ -508,6 +508,33 @@ def command_requirement_create(args: argparse.Namespace) -> int:
         return _command_requirement_create_impl(args)
 
 
+def command_requirement_show(args: argparse.Namespace) -> int:
+    requirement_id = safe_id(args.requirement_id, "requirement_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    record = read_object(requirement_path(root, requirement_id), "requirement")
+    print(json.dumps(record, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_requirement_list(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    records = []
+    for path in sorted((root / "requirements").glob("*.json")):
+        try:
+            record = read_json(path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        if args.status and record.get("status") != args.status:
+            continue
+        records.append(record)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
+
+
 def write_assignment_record(path: Path, record: dict[str, Any]) -> None:
     lock_path = path.with_suffix(path.suffix + ".lock")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1117,6 +1144,18 @@ def requirement_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
 
 
+def requirement_show_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--requirement-id", required=True)
+
+
+def requirement_list_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--status", choices=("needs_clarification", "clarified"))
+
+
 def planner_fixture_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -1310,6 +1349,10 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser(plan_create)
     requirement_create = sub.add_parser("requirement-create")
     requirement_create_parser(requirement_create)
+    requirement_show = sub.add_parser("requirement-show")
+    requirement_show_parser(requirement_show)
+    requirement_list = sub.add_parser("requirement-list")
+    requirement_list_parser(requirement_list)
     planner_fixture = sub.add_parser("planner-fixture")
     planner_fixture_parser(planner_fixture)
     task_create = sub.add_parser("task-create")
@@ -1357,6 +1400,10 @@ def main(argv: list[str] | None = None) -> int:
             return command_plan_create(args)
         if args.command == "requirement-create":
             return command_requirement_create(args)
+        if args.command == "requirement-show":
+            return command_requirement_show(args)
+        if args.command == "requirement-list":
+            return command_requirement_list(args)
         if args.command == "planner-fixture":
             return command_planner_fixture(args)
         if args.command == "task-create":
