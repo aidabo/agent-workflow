@@ -79,6 +79,47 @@ class StatusTests(unittest.TestCase):
             ]), 2)
             self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-4.json").exists())
 
+    def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C",
+            ]), 0)
+            fixture = Path(tmp) / "planner.json"
+            fixture.write_text(json.dumps({"title": "Fixture plan", "tasks": [
+                {"task_id": "task-a", "summary": "Inspect", "goal": "Inspection complete", "next_action": "Run checks"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-fixture", "--input", "planner.json",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-fixture.json").read_text())
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-a.json").read_text())
+            self.assertEqual((plan["status"], plan["requirement_id"], plan["task_ids"]), ("draft", "req-1", ["task-a"]))
+            self.assertEqual((task["task_status"], task["agent"]), ("ready", None))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-fixture-2", "--input", "planner.json",
+            ]), 2)
+            self.assertFalse((Path(tmp) / ".agent-workflow/state/plans/plan-fixture-2.json").exists())
+            invalid_risk = Path(tmp) / "invalid-risk.json"
+            invalid_risk.write_text(json.dumps({"risk_level": [], "tasks": [
+                {"task_id": "task-b", "summary": "Inspect", "goal": "Done"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-invalid-risk", "--input", "invalid-risk.json",
+            ]), 2)
+            invalid_task = Path(tmp) / "invalid-task.json"
+            invalid_task.write_text(json.dumps({"tasks": [
+                {"task_id": 1, "summary": "Inspect", "goal": "Done"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-invalid-task", "--input", "invalid-task.json",
+            ]), 2)
+
     def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = [
