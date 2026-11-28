@@ -99,7 +99,7 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 ## 実装段階
 
 1. requirement artifactの保存・検証CLI（実装済み）
-2. orchestrator sessionからartifactを作る対話入口（未実装。現在は`requirement-create`でfixture相当の入力を受ける）
+2. orchestrator sessionからartifactを作るprovider非依存の回答入口（実装済み: `requirement-interview`。対話UI/provider接続は未実装）
 3. planner adapterのprovider非依存fixture（実装済み）
 4. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
 5. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
