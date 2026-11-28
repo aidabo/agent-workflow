@@ -14,7 +14,6 @@ from .workspace_inspect import inspect_workspace
 
 
 OPERATIONS = {"interview", "plan", "critic", "verifier"}
-INTERVIEW_LIST_FIELDS = ("users", "scope", "non_goals", "constraints", "acceptance_criteria", "open_questions", "assumptions")
 
 
 def _workspace_file(workspace: Path, value: str, label: str) -> Path:
@@ -84,10 +83,14 @@ def _write_result(workspace: Path, path: Path, result: dict[str, Any]) -> None:
 def _interactive_payload() -> dict[str, Any]:
     def answer(label: str, required: bool = False) -> str:
         while True:
-            value = input(f"{label}: ").strip()
+            print(f"{label}: ", end="", file=sys.stderr, flush=True)
+            try:
+                value = input().strip()
+            except EOFError as exc:
+                raise ValueError("interactive input ended") from exc
             if value or not required:
                 return value
-            print(f"{label} is required")
+            print(f"{label} is required", file=sys.stderr)
 
     def list_answer(label: str) -> list[str]:
         value = answer(f"{label} (comma-separated, blank for none)")
@@ -113,12 +116,15 @@ def run_provider(args: argparse.Namespace) -> int:
     provider = safe_id(args.provider, "provider")
     if args.operation not in OPERATIONS:
         raise ValueError(f"unsupported operation: {args.operation}")
-    input_path = _workspace_file(workspace, args.input, "input") if args.input else None
+    if args.interactive and args.operation != "interview":
+        raise ValueError("--interactive is supported only for interview")
+    input_path = _workspace_file(workspace, args.input, "input") if args.input is not None else None
     config_path = _workspace_file(workspace, args.config, "config")
     output_path = _output_path(workspace, args.output, {path for path in (input_path, config_path) if path}) if args.output else None
-    payload = _interactive_payload() if args.interactive else _read_object(input_path, "provider input")
     preflight = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
     reject_secret_values(preflight, "preflight")
+    payload = _interactive_payload() if args.interactive else _read_object(input_path, "provider input")
+    reject_secret_values(payload, "provider input")
     request = {
         "schema_version": 1,
         "operation": args.operation,
@@ -178,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.timeout < 1 or args.timeout > 3600:
             raise ValueError("timeout must be between 1 and 3600")
         return run_provider(args)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, EOFError, json.JSONDecodeError) as exc:
         print(f"agent-orchestrator: {exc}", file=sys.stderr)
         return 2
 

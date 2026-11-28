@@ -145,7 +145,8 @@ class OrchestratorTests(unittest.TestCase):
                 "B", "operator", "P", "O", "src", "legacy", "constraint", "criteria", "question", "assumption", "low",
             ]
             output = io.StringIO()
-            with patch("builtins.input", side_effect=answers), contextlib.redirect_stdout(output):
+            error = io.StringIO()
+            with patch("builtins.input", side_effect=answers), contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
                 self.assertEqual(main([
                     "interview", "--workspace", tmp, "--provider", "test",
                     "--config", config.name, "--interactive", "--output", "clarified.json",
@@ -153,7 +154,29 @@ class OrchestratorTests(unittest.TestCase):
             result = json.loads((workspace / "clarified.json").read_text())
             self.assertEqual(result["background"], "B")
             self.assertEqual(result["acceptance_criteria"], ["criteria"])
+            self.assertIn("Background:", error.getvalue())
             self.assertFalse((workspace / "transcript.json").exists())
+
+    def test_interactive_rejects_non_interview_and_secret_or_eof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            config = workspace / "providers.json"
+            config.write_text(json.dumps({"providers": {"test": [sys.executable, "-c", "print('{}')"]}}))
+            self.assertEqual(main([
+                "plan", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
+            ]), 2)
+            with patch("builtins.input", side_effect=[
+                "sk-" + "A" * 24, "u", "p", "o", "scope", "non-goal", "constraint",
+                "criteria", "question", "assumption", "low",
+            ]):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
+                ]), 2)
+            with patch("builtins.input", side_effect=EOFError):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test", "--config", config.name, "--interactive",
+                ]), 2)
 
 
 if __name__ == "__main__":

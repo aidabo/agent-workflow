@@ -139,7 +139,7 @@ provider command自体、認証情報、会話全文はstateへ保存しない�
 
 1. workspace/source/docs preflight（実装済み: `workspace-inspect`）
 2. requirement artifactの保存・検証CLI（実装済み）
-3. orchestrator sessionからartifactを作るprovider非依存の回答入口（実装済み: `requirement-interview`。対話UI/provider接続は未実装）
+3. orchestrator sessionからartifactを作るprovider非依存の回答入口（実装済み: `requirement-interview`。interactive interviewは`orchestrator run interview --interactive`）
 4. planner adapterのprovider非依存fixture（実装済み）
 5. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
 6. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
