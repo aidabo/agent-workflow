@@ -239,11 +239,17 @@ class StatusTests(unittest.TestCase):
             self.assertFalse((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").exists())
 
     def test_requirement_interview_rejects_environment_style_secret_names(self):
-        for secret_name in ("AWS_SECRET_ACCESS_KEY", "SECRET_KEY"):
+        for secret_name, value in (
+            ("AWS_SECRET_ACCESS_KEY", "A" * 20),
+            ("SECRET_KEY", "dummy"),
+            ("client_secret", "A" * 20),
+            ("DB_PASSWORD", "dummy"),
+            ("TOKEN", "'dummy!pass'"),
+        ):
             with self.subTest(secret_name=secret_name), tempfile.TemporaryDirectory() as tmp:
                 answers = Path(tmp) / "answers.json"
                 answers.write_text(json.dumps({
-                    "background": "B", "problem": f"{secret_name}=" + "A" * 20,
+                    "background": "B", "problem": f"{secret_name}={value}",
                     "desired_outcome": "O", "acceptance_criteria": ["C"],
                 }))
                 self.assertEqual(main([
@@ -263,6 +269,8 @@ class StatusTests(unittest.TestCase):
                 "requirement-interview", "--workspace", tmp, "--requirement-id", "req-1",
                 "--input", "answers.json",
             ]), 0)
+            record = json.loads((Path(tmp) / ".agent-workflow/state/requirements/req-1.json").read_text())
+            self.assertEqual(record["constraints"], ["password: 8文字以上", "token: 24時間で失効"])
 
     def test_requirement_force_preserves_created_at_and_rejects_clarified(self):
         with tempfile.TemporaryDirectory() as tmp:

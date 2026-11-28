@@ -37,8 +37,10 @@ SECRET_VALUE = re.compile(
     r"(?:gh[pousr]|github_pat|xox[baprs])_[A-Za-z0-9_-]{20,}|"
     r"https://[^\s/]+/api/webhooks/[A-Za-z0-9_/-]{20,}|"
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----|"
-    r"(?i:(?<![A-Za-z0-9])(?:password|passwd|secret|token|api[_-]?key)"
-    r"[A-Za-z0-9_]*\s*[:=]\s*[A-Za-z0-9+/=_-]{16,}))"
+    # Keyword assignments accept short ASCII values, but only environment-style
+    # uppercase suffixes; this avoids treating natural-language policy text as a secret.
+    r"(?i:(?<![A-Za-z0-9])(?:password|passwd|secret|token|api[_-]?key))"
+    r"[A-Z0-9_]*\s*[:=]\s*[\"']?[!-~]+[\"']?(?=\s|$))"
 )
 
 
