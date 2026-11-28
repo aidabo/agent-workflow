@@ -146,6 +146,13 @@ def format_task_lines(root: Path | None = None, max_rows: int = 8, records: list
             line += f" test={test_status}"
         if record.get("error"):
             line += " ERROR"
+        review = record.get("review")
+        if isinstance(review, dict) and review.get("status"):
+            line += f" review={short_text(review.get('status'), 20)}"
+        if record.get("superseded_by"):
+            line += f" superseded→{short_text(record.get('superseded_by'), 24)}"
+        elif record.get("revision"):
+            line += f" revision={short_text(record.get('revision'), 8)}"
         width = shutil.get_terminal_size((120, 24)).columns
         line = truncate_display(line, max(1, width))
         lines.append(line)

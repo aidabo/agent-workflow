@@ -72,6 +72,22 @@ class MonitorDataTests(unittest.TestCase):
             self.assertIn("内容=parallel review queue", line)
             self.assertIn("次=run monitor checks", line)
 
+    def test_task_review_and_revision_context_are_visible(self):
+        line = format_task_lines(records=[{
+            "task_id": "task-r1", "agent": "codex", "phase": "docs", "state": "idle",
+            "summary": "retry", "review": {"status": "changes_requested"}, "revision": 1,
+        }])[0]
+        self.assertIn("review=changes_requested", line)
+        self.assertIn("revision=1", line)
+
+    def test_superseded_task_shows_safe_lineage_marker(self):
+        line = format_task_lines(records=[{
+            "task_id": "task-1", "agent": "codex", "phase": "code_review", "state": "waiting_user",
+            "summary": "old", "superseded_by": "task-r1", "revision": 1,
+        }])[0]
+        self.assertIn("superseded→task-r1", line)
+        self.assertNotIn("revision=", line)
+
     def test_assignment_pending_tasks_are_not_work_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "state"
