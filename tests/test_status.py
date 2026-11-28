@@ -100,12 +100,25 @@ class StatusTests(unittest.TestCase):
             self.assertEqual(plan["ai_review"]["verifier_findings"], ["Missing test evidence"])
             self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
             self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "changes_requested",
+                "--clear-findings", "--critic-finding", "new finding",
+            ]), 2)
+            self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
                 "--critic-finding", "new finding",
             ]), 2)
             self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
             ]), 2)
+            self.assertEqual(main([
+                "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
+                "--clear-findings",
+            ]), 0)
+            self.assertEqual(main([
+                "plan-create", "--workspace", tmp, "--plan-id", "plan-1", "--title", "Revised",
+                "--requirement", "Changed", "--force",
+            ]), 0)
+            self.assertEqual(main(["plan-approve", "--workspace", tmp, "--plan-id", "plan-1"]), 2)
             self.assertEqual(main([
                 "plan-review", "--workspace", tmp, "--plan-id", "plan-1", "--review-status", "approved",
                 "--clear-findings",
