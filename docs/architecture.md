@@ -153,7 +153,7 @@ sequenceDiagram
   H->>A: 同じbranchで再開を指示
 ```
 
-checkpointはheartbeatごとには保存しない。phase変更、test結果、PR操作、next action変更、明示checkpoint、graceful stopを保存契機とする。
+checkpointはheartbeatごとには保存しない。phase変更、test結果、review更新、PR操作、next action変更、明示checkpoint、graceful stopを保存契機とする。
 
 ### 保存領域の境界
 

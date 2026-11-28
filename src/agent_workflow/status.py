@@ -624,7 +624,7 @@ def merge_record(path: Path, updates: dict[str, Any], *, reset: bool = False, cl
                 continue
             if key == "review" and isinstance(value, dict):
                 previous_review = record.get("review") if isinstance(record.get("review"), dict) else {}
-                merged_review = {**previous_review, **{k: v for k, v in value.items() if v is not None}}
+                merged_review = {"status": "pending", **previous_review, **{k: v for k, v in value.items() if v is not None}}
                 record[key] = merged_review
             else:
                 record[key] = value
@@ -694,6 +694,7 @@ def build_checkpoint(task: dict[str, Any], *, task_id: str, agent: str, workspac
         "head_sha": task.get("commit"),
         "pr": task.get("pr"),
         "test": task.get("test"),
+        "review": task.get("review"),
         "next_action": next_action or task.get("next_action") or previous.get("next_action") or task.get("goal"),
         "resume_note": resume_note or task.get("resume_note") or previous.get("resume_note"),
         "references": references,
@@ -1005,6 +1006,7 @@ def command_status(args: argparse.Namespace) -> int:
             args.repo, args.repo_dir, args.phase, args.state, args.task_status, args.goal,
             args.branch, args.commit, args.pr, args.test_status, args.test_summary,
             args.event, args.blocked_reason,
+            args.review_status, args.review_summary,
         )
     )
     if checkpoint_event:
