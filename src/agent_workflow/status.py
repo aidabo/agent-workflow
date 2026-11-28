@@ -106,6 +106,9 @@ def reject_secret_values(value: Any, label: str) -> None:
     elif isinstance(value, list):
         for index, item in enumerate(value):
             reject_secret_values(item, f"{label}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            reject_secret_values(item, f"{label}.{key}")
 
 
 def active_task_owners(root: Path, task_id: str) -> list[str]:
@@ -259,6 +262,71 @@ def command_task_list(args: argparse.Namespace) -> int:
             continue
         records.append(record)
     print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_planner_fixture(args: argparse.Namespace) -> int:
+    requirement_id = safe_id(args.requirement_id, "requirement_id")
+    plan_id = safe_id(args.plan_id, "plan_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    root = state_root(workspace, args.state_root)
+    input_path = (workspace / args.input).resolve()
+    if input_path.is_absolute() and workspace not in input_path.parents and input_path != workspace:
+        raise ValueError("fixture input must be workspace-relative")
+    if ".." in Path(args.input).parts:
+        raise ValueError("fixture input must not escape workspace")
+    with assignment_lock(root):
+        requirement = read_object(requirement_path(root, requirement_id), "requirement")
+        if requirement.get("status") != "clarified":
+            raise ValueError(f"requirement {requirement_id} must be clarified")
+        try:
+            fixture = json.loads(input_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"invalid planner fixture: {exc}") from exc
+        if not isinstance(fixture, dict) or not isinstance(fixture.get("tasks"), list) or not fixture["tasks"]:
+            raise ValueError("planner fixture requires a non-empty tasks list")
+        reject_secret_values(fixture, "fixture")
+        plan_file = plan_path(root, plan_id)
+        if plan_file.exists():
+            raise ValueError(f"plan already exists: {plan_id}")
+        tasks = []
+        for item in fixture["tasks"]:
+            if not isinstance(item, dict):
+                raise ValueError("planner fixture tasks must be objects")
+            task_id = safe_id(item.get("task_id"), "task_id")
+            if any(task["task_id"] == task_id for task in tasks):
+                raise ValueError(f"duplicate fixture task: {task_id}")
+            tasks.append({
+                "task_id": task_id, "plan_id": plan_id, "agent": None,
+                "summary": item.get("summary", ""), "goal": item.get("goal", ""),
+                "next_action": item.get("next_action"),
+                "acceptance_criteria": item.get("acceptance_criteria", []),
+                "phase": "docs", "state": "idle", "task_status": "ready",
+                "pipeline_managed": True, "created_at": now(), "updated_at": now(),
+            })
+        if any(not task["summary"] or not task["goal"] for task in tasks):
+            raise ValueError("fixture tasks require summary and goal")
+        plan = {
+            "plan_id": plan_id, "requirement_id": requirement_id,
+            "title": fixture.get("title", plan_id),
+            "requirement": requirement.get("desired_outcome"),
+            "users": requirement.get("users", []),
+            "acceptance_criteria": fixture.get("acceptance_criteria", requirement.get("acceptance_criteria", [])),
+            "scope": requirement.get("scope", []), "non_goals": requirement.get("non_goals", []),
+            "constraints": requirement.get("constraints", []), "open_questions": [],
+            "assumptions": requirement.get("assumptions", []),
+            "task_ids": [task["task_id"] for task in tasks],
+            "risk_level": fixture.get("risk_level", requirement.get("risk_level", "medium")),
+            "status": "draft", "created_at": now(), "updated_at": now(),
+        }
+        for key, value in plan.items():
+            reject_secret_values(value, key)
+        atomic_write(plan_file, plan)
+        for task in tasks:
+            for key, value in task.items():
+                reject_secret_values(value, key)
+            atomic_write(path_for(root, "tasks", task["task_id"]), task)
+    print(json.dumps({"plan": plan, "tasks": tasks}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -977,6 +1045,14 @@ def requirement_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true")
 
 
+def planner_fixture_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--state-root")
+    parser.add_argument("--requirement-id", required=True)
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--input", required=True)
+
+
 def task_create_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--state-root")
@@ -1152,6 +1228,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser(plan_create)
     requirement_create = sub.add_parser("requirement-create")
     requirement_create_parser(requirement_create)
+    planner_fixture = sub.add_parser("planner-fixture")
+    planner_fixture_parser(planner_fixture)
     task_create = sub.add_parser("task-create")
     task_create_parser(task_create)
     revision_create = sub.add_parser("revision-create")
@@ -1195,6 +1273,8 @@ def main(argv: list[str] | None = None) -> int:
             return command_plan_create(args)
         if args.command == "requirement-create":
             return command_requirement_create(args)
+        if args.command == "planner-fixture":
+            return command_planner_fixture(args)
         if args.command == "task-create":
             return command_task_create(args)
         if args.command == "revision-create":

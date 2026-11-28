@@ -64,6 +64,26 @@ class StatusTests(unittest.TestCase):
                 "plan-create", "--workspace", tmp, "--plan-id", "plan-2",
                 "--title", "Blocked", "--requirement-id", "req-missing",
             ]), 2)
+
+    def test_planner_fixture_creates_reproducible_draft_plan_and_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "B", "--problem", "P", "--desired-outcome", "O",
+                "--acceptance-criteria", "C",
+            ]), 0)
+            fixture = Path(tmp) / "planner.json"
+            fixture.write_text(json.dumps({"title": "Fixture plan", "tasks": [
+                {"task_id": "task-a", "summary": "Inspect", "goal": "Inspection complete", "next_action": "Run checks"},
+            ]}))
+            self.assertEqual(main([
+                "planner-fixture", "--workspace", tmp, "--requirement-id", "req-1",
+                "--plan-id", "plan-fixture", "--input", "planner.json",
+            ]), 0)
+            plan = json.loads((Path(tmp) / ".agent-workflow/state/plans/plan-fixture.json").read_text())
+            task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-a.json").read_text())
+            self.assertEqual((plan["status"], plan["requirement_id"], plan["task_ids"]), ("draft", "req-1", ["task-a"]))
+            self.assertEqual((task["task_status"], task["agent"]), ("ready", None))
             self.assertEqual(main([
                 "requirement-create", "--workspace", tmp, "--requirement-id", "req-open",
                 "--background", "B", "--problem", "P", "--desired-outcome", "O",
