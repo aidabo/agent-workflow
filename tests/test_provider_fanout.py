@@ -35,9 +35,33 @@ class ProviderFanoutTests(unittest.TestCase):
             self.assertIn("request_head", aggregate["findings"][0])
 
     def test_fanout_rejects_interview_operation(self):
-        self.assertEqual(main([
-            "critic", "--workspace", ".", "--provider", "one", "--config", "x", "--input", "y",
-        ]), 2)
+        with self.assertRaises(SystemExit):
+            main(["interview", "--workspace", ".", "--provider", "one", "--config", "x", "--input", "y"])
+
+    def test_fanout_marks_provider_failure_and_rejects_output_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            (workspace / "input.json").write_text(json.dumps({"requirement": "R"}))
+            good = workspace / "good.py"
+            good.write_text("import json; print(json.dumps({'schema_version':1,'operation':'critic','result':{'finding':'A'}}))\n")
+            bad = workspace / "bad.py"
+            bad.write_text("raise SystemExit(3)\n")
+            config = workspace / "providers.json"
+            config.write_text(json.dumps({"providers": {
+                "good": [sys.executable, str(good)], "bad": [sys.executable, str(bad)],
+            }}))
+            self.assertEqual(main([
+                "critic", "--workspace", tmp, "--provider", "good", "--provider", "bad",
+                "--config", config.name, "--input", "input.json", "--timeout", "10",
+            ]), 0)
+            aggregate = json.loads((workspace / "orchestrator-findings/critic-findings.json").read_text())
+            self.assertEqual(aggregate["status"], "needs_human")
+            self.assertTrue(any(item.get("error") for item in aggregate["findings"]))
+            self.assertEqual(main([
+                "critic", "--workspace", tmp, "--provider", "critic-findings",
+                "--config", config.name, "--input", "input.json", "--output", "orchestrator-findings/critic-findings.json",
+            ]), 2)
 
 
 if __name__ == "__main__":

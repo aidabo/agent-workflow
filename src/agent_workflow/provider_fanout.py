@@ -91,6 +91,8 @@ def run(args: argparse.Namespace) -> int:
     reject_secret_values(preflight, "preflight")
     root = Path(__file__).resolve().parents[2]
     outputs = {provider: output_dir / f"{provider}.json" for provider in providers}
+    if output_path in outputs.values():
+        raise ValueError("aggregate output must not overwrite a provider result")
     findings: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=len(providers)) as executor:
         futures = {
@@ -99,19 +101,29 @@ def run(args: argparse.Namespace) -> int:
         }
         for future in as_completed(futures):
             provider = futures[future]
-            findings.append({
+            finding = {
                 "provider": provider,
                 "operation": args.operation,
                 "request_head": (preflight.get("git") or {}).get("head"),
-                "result": future.result(),
-            })
+            }
+            try:
+                finding["result"] = future.result()
+            except (OSError, ValueError, RuntimeError) as exc:
+                finding["error"] = str(exc)
+            findings.append(finding)
     findings.sort(key=lambda item: item["provider"])
-    distinct = {json.dumps(item["result"], ensure_ascii=False, sort_keys=True) for item in findings}
+    current = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
+    head_changed = (preflight.get("git") or {}).get("head") != (current.get("git") or {}).get("head")
+    distinct = {
+        json.dumps(item["result"], ensure_ascii=False, sort_keys=True)
+        for item in findings if "result" in item
+    }
     aggregate = {
         "schema_version": 1,
         "operation": args.operation,
-        "status": "needs_human" if len(distinct) > 1 else "pending",
+        "status": "needs_human" if len(distinct) > 1 or any("error" in item for item in findings) or head_changed else "pending",
         "provider_count": len(findings),
+        "head_changed": head_changed,
         "findings": findings,
     }
     reject_secret_values(aggregate, "aggregate findings")
