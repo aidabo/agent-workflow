@@ -68,6 +68,7 @@ bin/agent-workflow resume --workspace "$PWD"
 
 `checkpoint`はtaskの現在状態を読み、branch、PR、test、review、next actionを保存する。taskのphaseやstatusを勝手に変更しない。
 `review.head_sha`はレビュー対象のhead、top-level `head_sha`は現在のtask headであり、異なる場合は再レビューが必要である。
+`--commit`には`git rev-parse HEAD`で得た完全SHAを渡す。短縮SHAを混ぜると同一commitでも不一致warningになる。
 
 `resume`は次を出力する。
 
@@ -76,6 +77,8 @@ bin/agent-workflow resume --workspace "$PWD"
 - branch、PR、test状態
 - 未完了のnext action
 - agent paneへ渡すresume prompt
+
+review headの不一致warningが出た場合は、現在のheadでcross-reviewを再実行してから作業を再開する。
 - branch・PR・workspaceの不一致warning
 
 初期版の`resume`は表示・prompt生成までとし、agent paneを自動再起動しない。重複実装や同じPRへの二重pushを防ぐためである。
