@@ -588,6 +588,13 @@ def parse_time(value: str) -> datetime:
     return parsed
 
 
+def latest_review(checkpoint: Any, task: Any) -> dict[str, Any] | None:
+    candidates = [value for value in (checkpoint, task) if isinstance(value, dict)]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda value: str(value.get("updated_at") or ""))
+
+
 def sweep_stale(root: Path, stale_after_seconds: int, heartbeat_interval_seconds: int = 60, current: datetime | None = None) -> list[str]:
     if heartbeat_interval_seconds <= 0 or stale_after_seconds < heartbeat_interval_seconds * 10:
         raise ValueError("stale_after_seconds must be at least 10 times heartbeat_interval_seconds")
@@ -768,6 +775,9 @@ def command_resume(args: argparse.Namespace) -> int:
         ):
             if checkpoint_value and task_value and checkpoint_value != task_value:
                 warning.append(f"checkpoint {label} differs from current task")
+        review = latest_review(checkpoint.get("review"), task.get("review"))
+        if isinstance(review, dict) and review.get("head_sha") and task.get("commit") and review["head_sha"] != task["commit"]:
+            warning.append("review head differs from current task head; re-review required")
         candidates.append({
             "task_id": task_id,
             "agent": task.get("agent"),
@@ -778,7 +788,7 @@ def command_resume(args: argparse.Namespace) -> int:
             "pr": checkpoint.get("pr") or task.get("pr"),
             "head_sha": checkpoint.get("head_sha") or task.get("commit"),
             "test": checkpoint.get("test") or task.get("test"),
-            "review": checkpoint.get("review") or task.get("review"),
+            "review": review,
             "revision": task.get("revision", 0),
             "previous_task_id": task.get("previous_task_id"),
             "superseded_by": task.get("superseded_by"),

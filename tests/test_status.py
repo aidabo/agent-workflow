@@ -11,10 +11,15 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from agent_workflow.context import resolve_context
 from agent_workflow.monitor_data import format_task_lines
-from agent_workflow.status import atomic_write, main, sweep_stale
+from agent_workflow.status import atomic_write, latest_review, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
+    def test_latest_review_prefers_newer_evidence(self):
+        self.assertEqual(latest_review(
+            {"status": "approved", "updated_at": "2026-01-01T00:00:00+00:00"},
+            {"status": "changes_requested", "updated_at": "2026-01-02T00:00:00+00:00"},
+        )["status"], "changes_requested")
     def test_plan_and_task_draft_commands_create_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(main([
