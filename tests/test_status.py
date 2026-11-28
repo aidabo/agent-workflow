@@ -15,6 +15,30 @@ from agent_workflow.status import atomic_write, latest_review, main, sweep_stale
 
 
 class StatusTests(unittest.TestCase):
+    def test_requirement_create_persists_clarified_artifact_and_questions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main([
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "Need it", "--problem", "Too slow", "--desired-outcome", "Fast",
+                "--users", "operator", "--acceptance-criteria", "Runs fast",
+                "--open-questions", "Which provider?", "--risk-level", "high",
+            ]), 0)
+            path = Path(tmp) / ".agent-workflow/state/requirements/req-1.json"
+            record = json.loads(path.read_text())
+            self.assertEqual(record["status"], "needs_clarification")
+            self.assertEqual(record["risk_level"], "high")
+            self.assertEqual(record["open_questions"], ["Which provider?"])
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_requirement_create_rejects_secret_and_duplicate_without_force(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = [
+                "requirement-create", "--workspace", tmp, "--requirement-id", "req-1",
+                "--background", "Need it", "--problem", "Problem", "--desired-outcome", "Outcome",
+            ]
+            self.assertEqual(main([*args, "--background", "sk-secret-value-that-must-not-save"]), 2)
+            self.assertEqual(main(args), 0)
+            self.assertEqual(main(args), 2)
     def test_latest_review_prefers_newer_evidence(self):
         self.assertEqual(latest_review(
             {"status": "approved", "updated_at": "2026-01-01T00:00:00+00:00"},
