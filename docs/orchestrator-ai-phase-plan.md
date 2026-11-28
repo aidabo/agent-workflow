@@ -41,6 +41,19 @@ flowchart LR
 - verifier: acceptance criteria、test/evidence、revision条件を検証する
 - いずれもtaskを実行せず、paneへ入力せず、assignしない
 
+### 次Phase（項目10・未実装）のprovider数と役割
+
+`orchestrator run`の基本単位は1 providerである。providerを増やす場合は、operationごとに役割を分ける。
+
+| operation | 標準構成 | 目的 |
+|---|---|---|
+| `interview` | primary 1つ | 要件を一貫した質問順で明確化する |
+| `plan` | primary 1つ | clarified requirementからdraftを作る |
+| `critic` | 2〜3 providerを並列 | scope漏れ、矛盾、危険な仮定を別視点で検出する |
+| `verifier` | 1〜2 provider | acceptance criteriaとtest/evidenceの実行可能性を確認する |
+
+複数providerのresultは、次Phaseでprovider名・operation・request head（preflightの`git.head`）を付けたfindings schemaへ集約する予定である。現状は1回の`orchestrator run`につき1 provider・1 outputであり、人が`plan-review --critic-finding/--verifier-finding`へ記録する。次Phase実装後も、findingsを直接taskやassignへ進めない。意見が一致しない場合は`needs_human`へ止め、単純な多数決で要件や安全条件を上書きしない。並列実行はread-only reviewに限り、同じstateやproduct codeを同時に書き換えない。
+
 ## clarified requirement schema
 
 保存先: `<state-root>/requirements/<requirement_id>.json`
@@ -146,5 +159,6 @@ provider command自体、認証情報、会話全文はstateへ保存しない�
 7. provider adapter runner（実装済み: `bin/agent-workflow orchestrator run`。provider wrapper設定は外部command）
 8. provider-neutral interactive interview session（実装済み: `--interactive`。回答はresultへ渡し、会話全文は保存しない）
 9. 実provider wrapperの標準設定・providerごとのstructured output adapter（実装済み: `bin/agent-provider`、設定例は`docs/provider-wrappers.md`）
+10. provider role routingと複数critic/verifierのfindings集約（次Phase。interview/planのprimaryは1つ、review operationだけ複数化）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。
