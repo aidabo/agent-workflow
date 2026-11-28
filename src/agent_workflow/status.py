@@ -768,6 +768,9 @@ def command_resume(args: argparse.Namespace) -> int:
         ):
             if checkpoint_value and task_value and checkpoint_value != task_value:
                 warning.append(f"checkpoint {label} differs from current task")
+        review = checkpoint.get("review") or task.get("review")
+        if isinstance(review, dict) and review.get("head_sha") and task.get("commit") and review["head_sha"] != task["commit"]:
+            warning.append("review head differs from current task head; re-review required")
         candidates.append({
             "task_id": task_id,
             "agent": task.get("agent"),
@@ -969,10 +972,12 @@ def command_status(args: argparse.Namespace) -> int:
         "updated_at": timestamp,
     }
     if args.review_status or args.review_summary:
+        previous_review = previous_task.get("review") if isinstance(previous_task.get("review"), dict) else {}
         task_updates["review"] = {
             "status": args.review_status,
             "summary": args.review_summary,
-            "head_sha": args.commit or previous_task.get("commit"),
+            "head_sha": ((args.commit or previous_task.get("commit")) if args.review_status
+                         else previous_review.get("head_sha")),
             "updated_at": timestamp,
         }
     previous_active = set(previous_agent.get("active_task_ids", []))

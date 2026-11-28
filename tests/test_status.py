@@ -420,12 +420,14 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             args = ["--workspace", tmp, "--agent", "codex", "--task-id", "task-1"]
             self.assertEqual(main(["begin", *args, "--phase", "coding"]), 0)
-            self.assertEqual(main(["update", *args, "--review-status", "changes_requested", "--review-summary", "Fix test"]), 0)
+            self.assertEqual(main(["update", *args, "--commit", "commit-a", "--review-status", "changes_requested", "--review-summary", "Fix test"]), 0)
+            self.assertEqual(main(["update", *args, "--commit", "commit-b"]), 0)
             self.assertEqual(main(["update", *args, "--review-summary", "Fix test 2"]), 0)
             self.assertEqual(main(["heartbeat", *args]), 0)
             task = json.loads((Path(tmp) / ".agent-workflow/state/tasks/task-1.json").read_text())
             self.assertEqual(task["review"]["status"], "changes_requested")
             self.assertEqual(task["review"]["summary"], "Fix test 2")
+            self.assertEqual(task["review"]["head_sha"], "commit-a")
             checkpoint = json.loads((Path(tmp) / ".agent-workflow/state/checkpoints/task-1.json").read_text())
             self.assertEqual(checkpoint["review"]["status"], "changes_requested")
 
