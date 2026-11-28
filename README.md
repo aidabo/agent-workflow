@@ -159,6 +159,10 @@ bin/agent-workflow status workspace-inspect --workspace "$PWD" --docs-dir docs
 bin/agent-workflow orchestrator run interview --workspace "$PWD" \
   --provider claude --config providers.json --input answers.json \
   --output clarified.json
+# 対話式に一問ずつ確認する場合（会話全文は保存しない）
+bin/agent-workflow orchestrator run interview --workspace "$PWD" \
+  --provider claude --config providers.json --interactive \
+  --output clarified.json
 # orchestrator sessionから回答fixtureをartifactへ変換する場合
 # answers.jsonはbackground/problem/desired_outcome、acceptance_criteria、risk_level等を含む
 bin/agent-workflow status requirement-interview --workspace "$PWD" \

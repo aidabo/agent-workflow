@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +133,27 @@ class OrchestratorTests(unittest.TestCase):
                     "plan", "--workspace", tmp, "--provider", "test",
                     "--config", config.name, "--input", "input.json", "--output", output,
                 ]), 2)
+
+    def test_interactive_interview_builds_payload_without_saving_transcript(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "docs").mkdir()
+            config = workspace / "providers.json"
+            command = [sys.executable, "-c", "import json,sys; r=json.load(sys.stdin); print(json.dumps({'schema_version':1,'operation':r['operation'],'result':r['payload']}))"]
+            config.write_text(json.dumps({"providers": {"test": command}}))
+            answers = [
+                "B", "operator", "P", "O", "src", "legacy", "constraint", "criteria", "question", "assumption", "low",
+            ]
+            output = io.StringIO()
+            with patch("builtins.input", side_effect=answers), contextlib.redirect_stdout(output):
+                self.assertEqual(main([
+                    "interview", "--workspace", tmp, "--provider", "test",
+                    "--config", config.name, "--interactive", "--output", "clarified.json",
+                ]), 0)
+            result = json.loads((workspace / "clarified.json").read_text())
+            self.assertEqual(result["background"], "B")
+            self.assertEqual(result["acceptance_criteria"], ["criteria"])
+            self.assertFalse((workspace / "transcript.json").exists())
 
 
 if __name__ == "__main__":

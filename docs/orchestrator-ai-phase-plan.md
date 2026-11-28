@@ -143,7 +143,8 @@ provider command自体、認証情報、会話全文はstateへ保存しない�
 4. planner adapterのprovider非依存fixture（実装済み）
 5. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
 6. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
-7. provider adapter runner（実装済み: `bin/agent-workflow orchestrator run`。provider wrapper設定と対話UIは未実装）
-8. 実provider wrapperとinteractive session（未実装）
+7. provider adapter runner（実装済み: `bin/agent-workflow orchestrator run`。provider wrapper設定は外部command）
+8. provider-neutral interactive interview session（実装済み: `--interactive`。回答はresultへ渡し、会話全文は保存しない）
+9. 実provider wrapperの標準設定・providerごとのstructured output adapter（未実装）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。

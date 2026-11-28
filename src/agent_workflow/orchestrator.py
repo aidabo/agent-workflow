@@ -14,6 +14,7 @@ from .workspace_inspect import inspect_workspace
 
 
 OPERATIONS = {"interview", "plan", "critic", "verifier"}
+INTERVIEW_LIST_FIELDS = ("users", "scope", "non_goals", "constraints", "acceptance_criteria", "open_questions", "assumptions")
 
 
 def _workspace_file(workspace: Path, value: str, label: str) -> Path:
@@ -80,15 +81,42 @@ def _write_result(workspace: Path, path: Path, result: dict[str, Any]) -> None:
             os.unlink(temporary)
 
 
+def _interactive_payload() -> dict[str, Any]:
+    def answer(label: str, required: bool = False) -> str:
+        while True:
+            value = input(f"{label}: ").strip()
+            if value or not required:
+                return value
+            print(f"{label} is required")
+
+    def list_answer(label: str) -> list[str]:
+        value = answer(f"{label} (comma-separated, blank for none)")
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+    payload: dict[str, Any] = {
+        "background": answer("Background", required=True),
+        "users": list_answer("Users"),
+        "problem": answer("Problem", required=True),
+        "desired_outcome": answer("Desired outcome", required=True),
+    }
+    for field in ("scope", "non_goals", "constraints", "acceptance_criteria", "open_questions", "assumptions"):
+        payload[field] = list_answer(field)
+    risk_level = answer("Risk level (low/medium/high)") or "medium"
+    if risk_level not in {"low", "medium", "high"}:
+        raise ValueError("risk level must be low, medium, or high")
+    payload["risk_level"] = risk_level
+    return payload
+
+
 def run_provider(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).expanduser().resolve()
     provider = safe_id(args.provider, "provider")
     if args.operation not in OPERATIONS:
         raise ValueError(f"unsupported operation: {args.operation}")
-    input_path = _workspace_file(workspace, args.input, "input")
+    input_path = _workspace_file(workspace, args.input, "input") if args.input else None
     config_path = _workspace_file(workspace, args.config, "config")
-    output_path = _output_path(workspace, args.output, {input_path, config_path}) if args.output else None
-    payload = _read_object(input_path, "provider input")
+    output_path = _output_path(workspace, args.output, {path for path in (input_path, config_path) if path}) if args.output else None
+    payload = _interactive_payload() if args.interactive else _read_object(input_path, "provider input")
     preflight = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
     reject_secret_values(preflight, "preflight")
     request = {
@@ -139,7 +167,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--docs-dir", default="docs")
     parser.add_argument("--provider", required=True)
     parser.add_argument("--config", required=True)
-    parser.add_argument("--input", required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--input")
+    inputs.add_argument("--interactive", action="store_true")
     parser.add_argument("--output")
     parser.add_argument("--max-files", type=int, default=200)
     parser.add_argument("--timeout", type=int, default=300)
