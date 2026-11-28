@@ -106,6 +106,8 @@ wrapperは`schema_version`、同じ`operation`、objectの`result`を持つJSON�
 - responseのschema
 - payload、preflight、responseに含まれるsecret
 
+`--output`を指定した場合は、検証済みresponseの`result`だけをworkspace内の0600 JSONへatomic writeする。request全体、preflight、providerのstdout/stderrログは保存しない。このresultを`requirement-interview --input`へ渡して要件artifact化できる。
+
 provider command自体、認証情報、会話全文はstateへ保存しない。commandは環境変数を引き継ぐため、provider configは信頼できるworkspaceに限定する。
 
 ## workspace preflight

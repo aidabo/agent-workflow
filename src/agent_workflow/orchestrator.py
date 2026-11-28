@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,33 @@ def _provider_command(config_path: Path, provider: str) -> list[str]:
     return command
 
 
+def _output_path(workspace: Path, value: str) -> Path:
+    path = (workspace / value).resolve()
+    relative = path.relative_to(workspace) if workspace in path.parents else None
+    if relative is None or any(part.startswith(".") for part in relative.parts):
+        raise ValueError("output must be a visible workspace-relative path")
+    if path.exists() and not path.is_file():
+        raise ValueError("output must be a regular file")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_result(path: Path, result: dict[str, Any]) -> None:
+    payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        path.chmod(0o600)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def run_provider(args: argparse.Namespace) -> int:
     workspace = Path(args.workspace).expanduser().resolve()
     provider = safe_id(args.provider, "provider")
@@ -53,6 +81,7 @@ def run_provider(args: argparse.Namespace) -> int:
         raise ValueError(f"unsupported operation: {args.operation}")
     input_path = _workspace_file(workspace, args.input, "input")
     config_path = _workspace_file(workspace, args.config, "config")
+    output_path = _output_path(workspace, args.output) if args.output else None
     payload = _read_object(input_path, "provider input")
     preflight = inspect_workspace(workspace, args.docs_dir, state_root(workspace, args.state_root), args.max_files)
     reject_secret_values(preflight, "preflight")
@@ -90,6 +119,8 @@ def run_provider(args: argparse.Namespace) -> int:
     if "result" not in response or not isinstance(response["result"], dict):
         raise ValueError("provider response requires a result object")
     reject_secret_values(response, "provider response")
+    if output_path:
+        _write_result(output_path, response["result"])
     print(json.dumps(response, ensure_ascii=False, indent=2))
     return 0
 
@@ -103,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--input", required=True)
+    parser.add_argument("--output")
     parser.add_argument("--max-files", type=int, default=200)
     parser.add_argument("--timeout", type=int, default=300)
     try:
