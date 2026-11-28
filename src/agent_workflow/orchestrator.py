@@ -134,24 +134,21 @@ def run_provider(args: argparse.Namespace) -> int:
         "payload": payload,
     }
     command = _provider_command(config_path, provider)
+    provider_env = os.environ.copy()
+    provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(max(1, args.timeout - 5))
+    process = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, cwd=workspace, env=provider_env, start_new_session=True,
+    )
     try:
-        provider_env = os.environ.copy()
-        provider_env["AGENT_WORKFLOW_WRAPPER_TIMEOUT"] = str(args.timeout)
-        process = subprocess.Popen(
-            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, cwd=workspace, env=provider_env, start_new_session=True,
+        stdout, stderr = process.communicate(
+            json.dumps(request, ensure_ascii=False), timeout=args.timeout,
         )
-        try:
-            stdout, stderr = process.communicate(
-                json.dumps(request, ensure_ascii=False), timeout=args.timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
-            raise ValueError(f"provider timed out after {args.timeout}s") from exc
-        completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except subprocess.TimeoutExpired as exc:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
         raise ValueError(f"provider timed out after {args.timeout}s") from exc
+    completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     if completed.returncode != 0:
         raise ValueError(f"provider exited with {completed.returncode}")
     try:

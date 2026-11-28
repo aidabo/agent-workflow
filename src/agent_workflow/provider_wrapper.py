@@ -48,7 +48,7 @@ def _run_process(command: list[str], prompt: str, workspace: Path) -> subprocess
     try:
         stdout, stderr = process.communicate(prompt, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
-        os.killpg(process.pid, signal.SIGKILL)
+        process.kill()
         process.communicate()
         raise RuntimeError("provider wrapper timed out") from exc
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)

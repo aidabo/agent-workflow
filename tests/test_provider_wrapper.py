@@ -54,6 +54,18 @@ class ProviderWrapperTests(unittest.TestCase):
                 result = run("deepseek", self.request())
         self.assertEqual(result["result"]["problem"], "P")
 
+    def test_wrapper_timeout_kills_provider_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "slow-provider"
+            fake.write_text("#!/bin/sh\nsleep 2\n")
+            fake.chmod(0o700)
+            with patch.dict("os.environ", {
+                "AGENT_WORKFLOW_DEEPSEEK_COMMAND": str(fake),
+                "AGENT_WORKFLOW_WRAPPER_TIMEOUT": "1",
+            }):
+                with self.assertRaises(RuntimeError):
+                    run("deepseek", self.request())
+
 
 if __name__ == "__main__":
     unittest.main()
