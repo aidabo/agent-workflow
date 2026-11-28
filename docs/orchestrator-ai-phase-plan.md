@@ -86,6 +86,20 @@ output: plan draft + task drafts + assumptions + critic/verifier findings
 
 provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まない。provider障害時はdraft生成を中断し、既存taskを変更しない。
 
+Phase 7のadapter runnerは、provider固有wrapperを設定から実行する。runnerはworkspace preflightと入力JSONを次のrequestとしてstdinへ渡す。
+
+```json
+{
+  "schema_version": 1,
+  "operation": "interview|plan|critic|verifier",
+  "provider": "claude",
+  "preflight": {"schema_version": 1, "...": "workspace metadata"},
+  "payload": {"...": "validated input"}
+}
+```
+
+wrapperは`schema_version`、同じ`operation`、objectの`result`を持つJSONをstdoutへ返す。runnerはshellを経由せず、timeout・入力path・出力schema・secretを検証する。provider command自体、認証情報、会話全文はstateへ保存しない。
+
 ## workspace preflight
 
 `workspace-inspect`はorchestratorの要件確認・task企画前に実行する読み取り専用のpreflightである。
@@ -119,6 +133,7 @@ provider（Codex、Claude、DeepSeek等）をstatus CLIへ直接埋め込まな�
 4. planner adapterのprovider非依存fixture（実装済み）
 5. Critic/Verifierの結果をplanへ保存（実装済み: plan-review）
 6. plan/task review後に既存approve/assignへ接続（実装済み: plan-review gate）
-7. 実provider adapterとinteractive session（未実装）
+7. provider adapter runner（実装済み: `bin/agent-workflow orchestrator run`。provider wrapper設定と対話UIは未実装）
+8. 実provider wrapperとinteractive session（未実装）
 
 完了条件は、fixture入力から同じplan/task draftが再現でき、secretが保存されず、open questionがある場合にpipeline taskのapprove/assignまで進まないことである。Critic/plannerの反復は上限を持ち、上限到達や未解決findingは`needs_human`で停止する。

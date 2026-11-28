@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from .status import reject_secret_values, safe_id
+from .workspace_inspect import inspect_workspace
+
+
+OPERATIONS = {"interview", "plan", "critic", "verifier"}
+
+
+def _workspace_file(workspace: Path, value: str, label: str) -> Path:
+    path = (workspace / value).resolve()
+    if workspace not in path.parents or any(part.startswith(".") for part in path.relative_to(workspace).parts):
+        raise ValueError(f"{label} must be a visible workspace-relative file")
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return path
+
+
+def _read_object(path: Path, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid {label}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    reject_secret_values(value, label)
+    return value
+
+
+def _provider_command(config_path: Path, provider: str) -> list[str]:
+    config = _read_object(config_path, "provider config")
+    providers = config.get("providers")
+    if not isinstance(providers, dict):
+        raise ValueError("provider config requires a providers object")
+    command = providers.get(provider)
+    if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+        raise ValueError(f"provider {provider} requires a non-empty command list")
+    return command
+
+
+def run_provider(args: argparse.Namespace) -> int:
+    workspace = Path(args.workspace).expanduser().resolve()
+    provider = safe_id(args.provider, "provider")
+    if args.operation not in OPERATIONS:
+        raise ValueError(f"unsupported operation: {args.operation}")
+    input_path = _workspace_file(workspace, args.input, "input")
+    config_path = _workspace_file(workspace, args.config, "config")
+    payload = _read_object(input_path, "provider input")
+    preflight = inspect_workspace(workspace, args.docs_dir, workspace / ".agent-workflow" / "state", args.max_files)
+    request = {
+        "schema_version": 1,
+        "operation": args.operation,
+        "provider": provider,
+        "preflight": preflight,
+        "payload": payload,
+    }
+    command = _provider_command(config_path, provider)
+    try:
+        completed = subprocess.run(
+            command,
+            input=json.dumps(request, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=args.timeout,
+            check=False,
+            cwd=workspace,
+            env=os.environ.copy(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f"provider timed out after {args.timeout}s") from exc
+    if completed.returncode != 0:
+        raise ValueError(f"provider exited with {completed.returncode}: {completed.stderr[-400:]}")
+    try:
+        response = json.loads(completed.stdout)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"provider returned invalid JSON: {exc}") from exc
+    if not isinstance(response, dict):
+        raise ValueError("provider response must be a JSON object")
+    if response.get("schema_version") != 1 or response.get("operation") != args.operation:
+        raise ValueError("provider response schema_version or operation does not match request")
+    if "result" not in response or not isinstance(response["result"], dict):
+        raise ValueError("provider response requires a result object")
+    reject_secret_values(response, "provider response")
+    print(json.dumps(response, ensure_ascii=False, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="agent-orchestrator")
+    parser.add_argument("operation", choices=sorted(OPERATIONS))
+    parser.add_argument("--workspace", default=".")
+    parser.add_argument("--docs-dir", default="docs")
+    parser.add_argument("--provider", required=True)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--max-files", type=int, default=200)
+    parser.add_argument("--timeout", type=int, default=300)
+    try:
+        args = parser.parse_args(argv)
+        if args.timeout < 1 or args.timeout > 3600:
+            raise ValueError("timeout must be between 1 and 3600")
+        return run_provider(args)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"agent-orchestrator: {exc}", file=os.sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
