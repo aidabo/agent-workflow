@@ -778,7 +778,7 @@ def command_resume(args: argparse.Namespace) -> int:
             "pr": checkpoint.get("pr") or task.get("pr"),
             "head_sha": checkpoint.get("head_sha") or task.get("commit"),
             "test": checkpoint.get("test") or task.get("test"),
-            "review": task.get("review"),
+            "review": checkpoint.get("review") or task.get("review"),
             "revision": task.get("revision", 0),
             "previous_task_id": task.get("previous_task_id"),
             "superseded_by": task.get("superseded_by"),
@@ -972,6 +972,7 @@ def command_status(args: argparse.Namespace) -> int:
         task_updates["review"] = {
             "status": args.review_status,
             "summary": args.review_summary,
+            "head_sha": args.commit or previous_task.get("commit"),
             "updated_at": timestamp,
         }
     previous_active = set(previous_agent.get("active_task_ids", []))
