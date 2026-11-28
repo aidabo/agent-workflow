@@ -27,7 +27,7 @@ def _relative_files(root: Path, limit: int) -> tuple[list[Path], bool]:
         )
         for name in sorted(names):
             path = Path(current) / name
-            if path.is_symlink() or not path.is_file():
+            if name.startswith(".") or path.is_symlink() or not path.is_file():
                 continue
             if len(files) >= limit:
                 return files, True
@@ -43,14 +43,19 @@ def _headings(path: Path) -> list[str]:
     except (OSError, UnicodeDecodeError):
         return []
     headings: list[str] = []
-    fence: str | None = None
+    fence_char: str | None = None
+    fence_length = 0
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("```") or stripped.startswith("~~~"):
-            marker = stripped[:3]
-            fence = None if fence == marker else marker if fence is None else fence
+        fence_match = re.match(r"^(`{3,}|~{3,})(?:.*)$", stripped)
+        if fence_match:
+            marker = fence_match.group(1)
+            if fence_char is None:
+                fence_char, fence_length = marker[0], len(marker)
+            elif marker[0] == fence_char and len(marker) >= fence_length:
+                fence_char, fence_length = None, 0
             continue
-        if fence is None and re.match(r"^#{1,6}\s+", stripped):
+        if fence_char is None and re.match(r"^#{1,6}\s+", stripped):
             headings.append(stripped[:160])
             if len(headings) == 20:
                 break
