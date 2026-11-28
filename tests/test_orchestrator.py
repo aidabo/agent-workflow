@@ -61,12 +61,15 @@ class OrchestratorTests(unittest.TestCase):
             (workspace / "docs" / "guide.md").write_text("# token: " + "A" * 20)
             (workspace / "input.json").write_text(json.dumps({"a": 1}))
             config = workspace / "providers.json"
-            config.write_text(json.dumps({"providers": {"test": [sys.executable, "-c", "import sys; print('secret=AAAAAAAAAAAAAAAA', file=sys.stderr); sys.exit(7)"]}}))
+            config.write_text(json.dumps({"providers": {"test": [sys.executable, "-c", "print('{}')"]}}))
             self.assertEqual(main([
                 "interview", "--workspace", tmp, "--provider", "test",
                 "--config", config.name, "--input", "input.json",
             ]), 2)
             (workspace / "docs" / "guide.md").write_text("# Safe\n")
+            config.write_text(json.dumps({"providers": {"test": [
+                sys.executable, "-c", "import sys; sys.stderr.write('sk-' + 'A' * 24); sys.exit(7)",
+            ]}}))
             error = io.StringIO()
             with contextlib.redirect_stderr(error):
                 self.assertEqual(main([
